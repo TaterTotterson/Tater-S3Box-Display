@@ -723,7 +723,26 @@ script:
     then:
       - http_request.get:
           url: !lambda |-
-            return std::string("${tater_base_url}/tater-ha/v1/display/feed")
+            std::string base = "${tater_base_url}";
+            if (base.compare(0, 5, "http:") == 0 && base.compare(0, 7, "http://") != 0) {
+              std::string rest = base.substr(5);
+              while (!rest.empty() && rest.front() == '/') {
+                rest.erase(0, 1);
+              }
+              base = "http://" + rest;
+            } else if (base.compare(0, 6, "https:") == 0 && base.compare(0, 8, "https://") != 0) {
+              std::string rest = base.substr(6);
+              while (!rest.empty() && rest.front() == '/') {
+                rest.erase(0, 1);
+              }
+              base = "https://" + rest;
+            } else if (base.compare(0, 7, "http://") != 0 && base.compare(0, 8, "https://") != 0) {
+              base = "http://" + base;
+            }
+            while (!base.empty() && base.back() == '/') {
+              base.pop_back();
+            }
+            return base + "/tater-ha/v1/display/feed"
               + "?target=${display_target}"
               + "&selector=${display_target}"
               + "&temp_out=${sensor_temp_out}"
@@ -772,7 +791,26 @@ script:
     then:
       - http_request.get:
           url: !lambda |-
-            return std::string("${tater_base_url}/tater-ha/v1/display/events")
+            std::string base = "${tater_base_url}";
+            if (base.compare(0, 5, "http:") == 0 && base.compare(0, 7, "http://") != 0) {
+              std::string rest = base.substr(5);
+              while (!rest.empty() && rest.front() == '/') {
+                rest.erase(0, 1);
+              }
+              base = "http://" + rest;
+            } else if (base.compare(0, 6, "https:") == 0 && base.compare(0, 8, "https://") != 0) {
+              std::string rest = base.substr(6);
+              while (!rest.empty() && rest.front() == '/') {
+                rest.erase(0, 1);
+              }
+              base = "https://" + rest;
+            } else if (base.compare(0, 7, "http://") != 0 && base.compare(0, 8, "https://") != 0) {
+              base = "http://" + base;
+            }
+            while (!base.empty() && base.back() == '/') {
+              base.pop_back();
+            }
+            return base + "/tater-ha/v1/display/events"
               + "?target=${display_target}"
               + "&after_seq=" + std::to_string(id(last_event_seq))
               + "&limit=4";
@@ -914,7 +952,7 @@ lvgl:
   displays:
     - s3_box_lcd
   buffer_size: 25%
-  log_level: DEBUG
+  log_level: WARN
   style_definitions:
     - id: screen_style
       bg_color: 0x111213
