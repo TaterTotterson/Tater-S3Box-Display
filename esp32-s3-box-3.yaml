@@ -1,3 +1,4 @@
+# Tater display firmware for the ESP32-S3-BOX-3.
 substitutions:
   device_name: taters3box
   friendly_name: taterS3Box
@@ -191,6 +192,13 @@ media_player:
       format: FLAC
       sample_rate: 48000
       num_channels: 1
+    on_announcement:
+      - if:
+          condition:
+            - microphone.is_capturing:
+          then:
+            - script.stop: activate_stop_word_once
+            - micro_wake_word.stop:
 
 spi:
   - id: spi_bus
@@ -267,6 +275,8 @@ micro_wake_word:
               then:
                 - voice_assistant.stop:
               else:
+                - micro_wake_word.stop:
+                - delay: 100ms
                 - voice_assistant.start:
                     wake_word: !lambda return wake_word;
 
@@ -323,7 +333,9 @@ voice_assistant:
               state: "Voice error"
           - script.execute: show_voice_page
   on_start:
+    - micro_wake_word.stop:
     - micro_wake_word.disable_model: ${wake_word_name}
+    - micro_wake_word.disable_model: stop
     - lambda: id(voice_assistant_phase) = 2;
     - text_sensor.template.publish:
         id: connection_status_text
@@ -378,21 +390,44 @@ voice_assistant:
               id: connection_status_text
               state: "Replying"
           - script.execute: show_voice_page
-          - script.execute: activate_stop_word_once
   on_tts_start:
+    - script.stop: activate_stop_word_once
+    - micro_wake_word.stop:
+    - delay: 100ms
     - lambda: id(voice_assistant_phase) = 5;
     - text_sensor.template.publish:
         id: connection_status_text
         state: "Replying"
     - script.execute: show_voice_page
-    - script.execute: activate_stop_word_once
   on_end:
     - wait_until:
         not:
           voice_assistant.is_running:
     - script.stop: activate_stop_word_once
+    - wait_until:
+        condition:
+          - media_player.is_announcing:
+              id: speaker_media_player
+        timeout: 0.5s
+    - wait_until:
+        condition:
+          and:
+            - not:
+                media_player.is_announcing:
+                  id: speaker_media_player
+            - not:
+                speaker.is_playing:
+                  id: box_speaker
+        timeout: 90s
+    - wait_until:
+        condition:
+          not:
+            microphone.is_capturing:
+        timeout: 2s
+    - micro_wake_word.stop:
     - micro_wake_word.disable_model: stop
     - micro_wake_word.enable_model: ${wake_word_name}
+    - micro_wake_word.start:
     - lambda: id(voice_assistant_phase) = 1;
     - text_sensor.template.publish:
         id: connection_status_text

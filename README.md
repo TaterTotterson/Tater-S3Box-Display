@@ -1,6 +1,6 @@
-# Tater-S3Box-Display
+# Tater ESP32-S3-BOX-3 Display
 
-ESPHome firmware for an ESP32-S3-BOX-3 style display that talks to Tater directly instead of binding the screen to Home Assistant widgets.
+ESPHome firmware for the ESP32-S3-BOX-3 display that talks to Tater directly instead of binding the screen to Home Assistant widgets.
 
 The screen is built with LVGL and uses the Tater color language: near-black surfaces, warm off-white text, muted secondary text, and burnt orange accents.
 
@@ -23,7 +23,7 @@ If Tater voice/display API auth is enabled, set `tater_token` to the same token 
 
 ## Setup
 
-Update the substitutions at the top of [s3box.yaml](s3box.yaml):
+Update the substitutions at the top of [esp32-s3-box-3.yaml](esp32-s3-box-3.yaml):
 
 ```yaml
 substitutions:
@@ -53,7 +53,7 @@ sensor_lightning_strikes: sensor.weather_lightning_strikes
 ## Requirements
 
 - ESPHome 2026.4.0 or newer
-- ESP32-S3 Box class device with PSRAM
+- ESP32-S3-BOX-3 with PSRAM
 - Tater running the display feed/event API
 
 ## Notes
