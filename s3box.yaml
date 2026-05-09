@@ -33,12 +33,11 @@ esphome:
           id: lcd_backlight
           brightness: 100%
       - script.execute: refresh_clock
-      - script.execute: fetch_tater_feed
-      - script.execute: fetch_tater_events
 
 esp32:
   board: esp32s3box
   flash_size: 16MB
+  cpu_frequency: 240MHz
   framework:
     type: esp-idf
     version: recommended
@@ -55,6 +54,8 @@ wifi:
   ssid: ${wifi_ssid}
   password: ${wifi_password}
   use_address: ${device_ip}
+  reboot_timeout: 0s
+  ap:
   on_connect:
     then:
       - text_sensor.template.publish:
@@ -69,11 +70,16 @@ wifi:
           state: "Wi-Fi offline"
 
 logger:
+  level: DEBUG
+  hardware_uart: USB_SERIAL_JTAG
 
 api:
+  reboot_timeout: 0s
 
 ota:
   - platform: esphome
+
+captive_portal:
 
 time:
   - platform: sntp
@@ -91,12 +97,13 @@ time:
 json:
 
 http_request:
-  timeout: 4s
+  timeout: 2s
   verify_ssl: false
 
 spi:
-  clk_pin: GPIO7
-  mosi_pin: GPIO6
+  - id: spi_bus
+    clk_pin: GPIO7
+    mosi_pin: GPIO6
 
 output:
   - platform: ledc
@@ -321,7 +328,7 @@ script:
             time: local_time
 
   - id: fetch_tater_feed
-    mode: restart
+    mode: single
     then:
       - http_request.get:
           url: !lambda |-
@@ -370,7 +377,7 @@ script:
                   state: "Tater offline"
 
   - id: fetch_tater_events
-    mode: restart
+    mode: single
     then:
       - http_request.get:
           url: !lambda |-
@@ -484,14 +491,22 @@ interval:
 
   - interval: 10s
     then:
-      - script.execute: fetch_tater_feed
+      - if:
+          condition:
+            wifi.connected:
+          then:
+            - script.execute: fetch_tater_feed
 
-  - interval: 2s
+  - interval: 5s
     then:
-      - script.execute: fetch_tater_events
+      - if:
+          condition:
+            wifi.connected:
+          then:
+            - script.execute: fetch_tater_events
 
 display:
-  - platform: ili9xxx
+  - platform: mipi_spi
     id: s3_box_lcd
     model: S3BOX
     data_rate: 40MHz
@@ -508,6 +523,7 @@ lvgl:
   displays:
     - s3_box_lcd
   buffer_size: 25%
+  log_level: DEBUG
   style_definitions:
     - id: screen_style
       bg_color: 0x111213
