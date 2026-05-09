@@ -1,6 +1,6 @@
 substitutions:
-  device_name: tater-display-livingroom
-  friendly_name: Tater Display Livingroom
+  device_name: tater-s3box-display-livingroom
+  friendly_name: Tater S3Box Display Livingroom
   display_target: livingroom
 
   # Point this at the Tater host running the voice/display API.
