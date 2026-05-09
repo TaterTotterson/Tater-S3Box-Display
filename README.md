@@ -33,10 +33,13 @@ substitutions:
   display_target: livingroom
   tater_base_url: http://tater.local:8501
   tater_token: ""
+  api_password: ""
   wifi_ssid: !secret wifi_ssid
   wifi_password: !secret wifi_password
   device_ip: 10.4.20.237
 ```
+
+`api_password` is optional. When Home Assistant is also on the network, set it to the same value as Tater Voice Core's ESPHome API Password so Tater is the client that owns the voice assistant stream.
 
 Then adjust the feed slot entity IDs if needed:
 
