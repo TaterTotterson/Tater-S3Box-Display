@@ -27,8 +27,8 @@ Update the substitutions at the top of [s3box.yaml](s3box.yaml):
 
 ```yaml
 substitutions:
-  device_name: tater-s3box-display-livingroom
-  friendly_name: Tater S3Box Display Livingroom
+  device_name: taterd
+  friendly_name: TaterD
   display_target: livingroom
   tater_base_url: http://tater.local:8501
   tater_token: ""
