@@ -40,7 +40,18 @@ esphome:
     then:
       - light.turn_on:
           id: lcd_backlight
-          brightness: 100%
+          brightness: !lambda |-
+            float brightness = id(display_brightness).state;
+            if (brightness != brightness) {
+              brightness = 100.0f;
+            }
+            if (brightness < 10.0f) {
+              brightness = 10.0f;
+            }
+            if (brightness > 100.0f) {
+              brightness = 100.0f;
+            }
+            return brightness / 100.0f;
       - script.execute: refresh_clock
 
 esp32:
@@ -429,6 +440,31 @@ text:
       - lambda: id(mww).set_capture_upload_url(x);
 
 number:
+  - platform: template
+    id: display_brightness
+    name: Display Brightness
+    icon: mdi:brightness-6
+    entity_category: config
+    optimistic: true
+    restore_value: true
+    initial_value: 100
+    min_value: 10
+    max_value: 100
+    step: 5
+    unit_of_measurement: "%"
+    set_action:
+      - light.turn_on:
+          id: lcd_backlight
+          brightness: !lambda |-
+            float brightness = x;
+            if (brightness < 10.0f) {
+              brightness = 10.0f;
+            }
+            if (brightness > 100.0f) {
+              brightness = 100.0f;
+            }
+            return brightness / 100.0f;
+
   - platform: template
     id: close_miss_threshold
     name: Close Miss Threshold
