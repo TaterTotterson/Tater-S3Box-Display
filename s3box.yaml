@@ -90,8 +90,10 @@ wifi:
           state: "Wi-Fi offline"
 
 logger:
-  level: DEBUG
+  level: INFO
   hardware_uart: USB_SERIAL_JTAG
+  logs:
+    lvgl: WARN
 
 api:
   reboot_timeout: 0s
@@ -129,6 +131,8 @@ json:
 http_request:
   timeout: 2s
   verify_ssl: false
+  buffer_size_rx: 1024
+  buffer_size_tx: 1024
 
 i2c:
   - id: i2c_adc_dac
@@ -224,6 +228,10 @@ globals:
     type: int
     restore_value: no
     initial_value: "0"
+  - id: voice_animation_frame
+    type: int
+    restore_value: no
+    initial_value: "0"
   - id: voice_assistant_phase
     type: int
     restore_value: no
@@ -301,6 +309,7 @@ voice_assistant:
     - text_sensor.template.publish:
         id: connection_status_text
         state: "Voice offline"
+    - script.execute: show_home_if_no_event
   on_error:
     - if:
         condition:
@@ -312,26 +321,32 @@ voice_assistant:
           - text_sensor.template.publish:
               id: connection_status_text
               state: "Voice error"
+          - script.execute: show_voice_page
   on_start:
     - micro_wake_word.disable_model: ${wake_word_name}
+    - lambda: id(voice_assistant_phase) = 2;
     - text_sensor.template.publish:
         id: connection_status_text
         state: "Voice active"
+    - script.execute: show_voice_page
   on_listening:
     - lambda: id(voice_assistant_phase) = 2;
     - text_sensor.template.publish:
         id: connection_status_text
         state: "Listening"
+    - script.execute: show_voice_page
   on_stt_vad_start:
     - lambda: id(voice_assistant_phase) = 3;
     - text_sensor.template.publish:
         id: connection_status_text
         state: "Hearing you"
+    - script.execute: show_voice_page
   on_stt_vad_end:
     - lambda: id(voice_assistant_phase) = 4;
     - text_sensor.template.publish:
         id: connection_status_text
         state: "Thinking"
+    - script.execute: show_voice_page
   on_tool_call_start:
     - lambda: id(voice_assistant_phase) = 6;
     - lambda: |-
@@ -362,12 +377,14 @@ voice_assistant:
           - text_sensor.template.publish:
               id: connection_status_text
               state: "Replying"
+          - script.execute: show_voice_page
           - script.execute: activate_stop_word_once
   on_tts_start:
     - lambda: id(voice_assistant_phase) = 5;
     - text_sensor.template.publish:
         id: connection_status_text
         state: "Replying"
+    - script.execute: show_voice_page
     - script.execute: activate_stop_word_once
   on_end:
     - wait_until:
@@ -542,6 +559,9 @@ text_sensor:
         - lvgl.label.update:
             id: status_label
             text: !lambda return x;
+        - lvgl.label.update:
+            id: voice_status_label
+            text: !lambda return x;
 
   - platform: template
     id: temp_out_text
@@ -691,14 +711,123 @@ script:
             time_format: "%a %b %d"
             time: local_time
 
-  - id: show_home_if_no_event
+  - id: update_voice_visual
+    mode: restart
+    then:
+      - lvgl.label.update:
+          id: voice_title_label
+          text: !lambda |-
+            switch (id(voice_assistant_phase)) {
+              case 3:
+                return "Hearing you";
+              case 4:
+                return "Thinking";
+              case 5:
+                return "Replying";
+              case 11:
+                return "Voice error";
+              case 2:
+              default:
+                return "Listening";
+            }
+      - lvgl.label.update:
+          id: voice_subtitle_label
+          text: !lambda |-
+            switch (id(voice_assistant_phase)) {
+              case 3:
+                return "Keep talking.";
+              case 4:
+                return "Working through it.";
+              case 5:
+                return "Sending the answer.";
+              case 11:
+                return "Voice needs attention.";
+              case 2:
+              default:
+                return "Say it, I'm listening.";
+            }
+      - lvgl.label.update:
+          id: voice_motion_label
+          text: !lambda |-
+            static const char * const listening[] = {
+              "o        .        o",
+              "  o      .      o  ",
+              "    o    .    o    ",
+              "      o  .  o      ",
+              "        o.o        ",
+              "      o  .  o      "
+            };
+            static const char * const hearing[] = {
+              "|  ||  |||  ||  |",
+              "|| ||| |||| ||| ||",
+              "||| ||||||||| |||",
+              "|| ||| |||| ||| ||",
+              "|  ||  |||  ||  |",
+              "   |   |||   |   "
+            };
+            static const char * const thinking[] = {
+              "o  --------    ",
+              "  o  ------    ",
+              "    o  ----    ",
+              "      o  --    ",
+              "        o      ",
+              "      --  o    "
+            };
+            static const char * const replying[] = {
+              "--__--__--__--",
+              "__--__--__--__",
+              "-_--_--_--_--",
+              "_--_--_--_--_",
+              "--__--__--__--",
+              "__--__--__--__"
+            };
+            static const char * const error[] = {
+              "x      x      x",
+              "  x    x    x  ",
+              "    x  x  x    ",
+              "      xxx      ",
+              "    x  x  x    ",
+              "  x    x    x  "
+            };
+            int frame = id(voice_animation_frame) % 6;
+            switch (id(voice_assistant_phase)) {
+              case 3:
+                return hearing[frame];
+              case 4:
+                return thinking[frame];
+              case 5:
+                return replying[frame];
+              case 11:
+                return error[frame];
+              case 2:
+              default:
+                return listening[frame];
+            }
+
+  - id: show_voice_page
     mode: restart
     then:
       - if:
           condition:
             lambda: return !id(event_visible);
           then:
-            - lvgl.page.show: home_page
+            - script.execute: update_voice_visual
+            - lvgl.page.show: voice_page
+
+  - id: show_home_if_no_event
+    mode: restart
+    then:
+      - if:
+          condition:
+            lambda: return !id(event_visible) && ((id(voice_assistant_phase) >= 2 && id(voice_assistant_phase) <= 5) || id(voice_assistant_phase) == 11);
+          then:
+            - script.execute: show_voice_page
+          else:
+            - if:
+                condition:
+                  lambda: return !id(event_visible);
+                then:
+                  - lvgl.page.show: home_page
 
   - id: activate_stop_word_once
     mode: restart
@@ -745,46 +874,60 @@ script:
             return base + "/tater-ha/v1/display/feed"
               + "?target=${display_target}"
               + "&selector=${display_target}"
-              + "&temp_out=${sensor_temp_out}"
-              + "&temp_in=${sensor_temp_in}"
-              + "&humidity_out=${sensor_humidity_out}"
-              + "&humidity_in=${sensor_humidity_in}"
-              + "&wind_speed=${sensor_wind_speed}"
-              + "&rain_rate=${sensor_rain_rate}"
-              + "&lightning_strikes=${sensor_lightning_strikes}";
+              + "&format=compact";
           request_headers:
             X-Tater-Token: "${tater_token}"
           capture_response: true
+          max_response_buffer_size: 2048
           on_response:
             then:
               - if:
                   condition:
                     lambda: return response->status_code == 200;
                   then:
-                    - text_sensor.template.publish:
-                        id: connection_status_text
-                        state: "Tater online"
+                    - if:
+                        condition:
+                          lambda: return id(voice_assistant_phase) <= 1 || id(voice_assistant_phase) >= 10;
+                        then:
+                          - text_sensor.template.publish:
+                              id: connection_status_text
+                              state: "Tater online"
                     - lambda: |-
                         json::parse_json(body, [](JsonObject root) -> bool {
                           JsonObject text = root["text"].as<JsonObject>();
-                          id(temp_out_text).publish_state(text["temp_out"] | "--");
-                          id(temp_in_text).publish_state(text["temp_in"] | "--");
-                          id(humidity_out_text).publish_state(text["humidity_out"] | "--");
-                          id(humidity_in_text).publish_state(text["humidity_in"] | "--");
-                          id(wind_text).publish_state(text["wind_speed"] | "--");
-                          id(rain_text).publish_state(text["rain_rate"] | "--");
-                          id(lightning_text).publish_state(text["lightning_strikes"] | "--");
+                          auto get_text = [&](const char *key) -> const char * {
+                            const char *value = text[key] | "";
+                            if (value == nullptr || value[0] == '\0') {
+                              return "--";
+                            }
+                            return value;
+                          };
+                          id(temp_out_text).publish_state(get_text("temp_out"));
+                          id(temp_in_text).publish_state(get_text("temp_in"));
+                          id(humidity_out_text).publish_state(get_text("humidity_out"));
+                          id(humidity_in_text).publish_state(get_text("humidity_in"));
+                          id(wind_text).publish_state(get_text("wind_speed"));
+                          id(rain_text).publish_state(get_text("rain_rate"));
+                          id(lightning_text).publish_state(get_text("lightning_strikes"));
                           return true;
                         });
                   else:
+                    - if:
+                        condition:
+                          lambda: return id(voice_assistant_phase) <= 1 || id(voice_assistant_phase) >= 10;
+                        then:
+                          - text_sensor.template.publish:
+                              id: connection_status_text
+                              state: "Tater offline"
+          on_error:
+            then:
+              - if:
+                  condition:
+                    lambda: return id(voice_assistant_phase) <= 1 || id(voice_assistant_phase) >= 10;
+                  then:
                     - text_sensor.template.publish:
                         id: connection_status_text
                         state: "Tater offline"
-          on_error:
-            then:
-              - text_sensor.template.publish:
-                  id: connection_status_text
-                  state: "Tater offline"
 
   - id: fetch_tater_events
     mode: single
@@ -900,7 +1043,22 @@ script:
             };
             return frames[id(tool_animation_frame)];
 
+  - id: animate_voice_pipeline
+    mode: restart
+    then:
+      - lambda: |-
+          id(voice_animation_frame) = (id(voice_animation_frame) + 1) % 6;
+      - script.execute: update_voice_visual
+
 interval:
+  - interval: 500ms
+    then:
+      - if:
+          condition:
+            lambda: return !id(event_visible) && ((id(voice_assistant_phase) >= 2 && id(voice_assistant_phase) <= 5) || id(voice_assistant_phase) == 11);
+          then:
+            - script.execute: animate_voice_pipeline
+
   - interval: 1s
     then:
       - script.execute: refresh_clock
@@ -911,7 +1069,7 @@ interval:
             - lambda: |-
                 id(event_visible) = false;
                 id(event_until_ms) = 0;
-            - lvgl.page.show: home_page
+            - script.execute: show_home_if_no_event
       - if:
           condition:
             lambda: return id(event_visible) && id(event_kind_text).state == "tool_call";
@@ -1151,6 +1309,86 @@ lvgl:
                   text_align: RIGHT
                   text_font: tater_font_14
                   text_color: 0xF1EEE8
+
+    - id: voice_page
+      styles: screen_style
+      widgets:
+        - obj:
+            x: 0
+            y: 0
+            width: 320
+            height: 34
+            bg_color: 0x151617
+            bg_opa: COVER
+            border_width: 0
+            radius: 0
+            pad_all: 0
+            widgets:
+              - label:
+                  x: 10
+                  y: 8
+                  width: 86
+                  text: "${tater_first_name}"
+                  long_mode: DOT
+                  text_font: tater_font_18
+                  text_color: 0xF08345
+              - label:
+                  id: voice_status_label
+                  x: 100
+                  y: 10
+                  width: 210
+                  text: "Voice active"
+                  text_align: RIGHT
+                  long_mode: DOT
+                  text_font: tater_font_14
+                  text_color: 0xA8A096
+        - label:
+            id: voice_title_label
+            x: 0
+            y: 54
+            width: 320
+            text: "Listening"
+            text_align: CENTER
+            long_mode: DOT
+            text_font: tater_font_36
+            text_color: 0xF08345
+        - obj:
+            x: 58
+            y: 108
+            width: 204
+            height: 4
+            styles: rail_style
+        - label:
+            id: voice_motion_label
+            x: 20
+            y: 88
+            width: 280
+            text: "o        .        o"
+            text_align: CENTER
+            long_mode: DOT
+            text_font: tater_font_24
+            text_color: 0xF08345
+        - obj:
+            x: 82
+            y: 124
+            width: 156
+            height: 2
+            bg_color: 0xF08345
+            bg_opa: COVER
+            border_width: 0
+            radius: 1
+            pad_all: 0
+        - label:
+            id: voice_subtitle_label
+            x: 24
+            y: 148
+            width: 272
+            height: 46
+            text: "Say it, I'm listening."
+            text_align: CENTER
+            long_mode: WRAP
+            text_font: tater_font_18
+            text_color: 0xF1EEE8
 
     - id: event_page
       styles: screen_style
