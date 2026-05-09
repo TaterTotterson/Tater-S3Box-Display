@@ -1,81 +1,57 @@
-# Tater S3 Box Display (ESPHome)
+# Tater-S3Box-Display
 
-A clean, always-on Home Assistant display for the **ESP32-S3 Box**, built with **ESPHome**.
+ESPHome firmware for an ESP32-S3-BOX-3 style display that talks to Tater directly instead of binding the screen to Home Assistant widgets.
 
-This config shows:
-- Large **time** and **full weekday date**
-- **Indoor & outdoor temperature** with **humidity**
-- A rotating **weather icon + value** (wind, rain rate, lightning)
-- Warm orange accents matched to the original S3 Box look
+The screen is built with LVGL and uses the Tater color language: near-black surfaces, warm off-white text, muted secondary text, and burnt orange accents.
 
-Everything is rendered locally on the device and pulls live data from Home Assistant sensors.
+## What It Shows
 
----
+- A Tater home dashboard with time, date, connection status, indoor/outdoor temperature, humidity, wind, rain, and lightning slots.
+- A transient notification page for display events pushed through Tater.
+- A dedicated tool-call page for live voice tool progress, using the mirrored-dot animation language from the Tater voice firmware.
 
-## Features
+## Tater API
 
-- 🕒 Big, readable clock
-- 📅 Full weekday date (Friday, not Fri)
-- 🌡️ Indoor / Outdoor temperature
-- 💧 Indoor / Outdoor humidity (smaller text)
-- 🌬️ Rotating weather icon:
-  - Wind speed
-  - Rain rate
-  - Lightning strikes
-- 🎨 Black / white / orange color scheme
-- 💡 Backlight always on (configurable)
----
-![IMG_0178-ezgif com-resize](https://github.com/user-attachments/assets/9c4b1395-4962-4266-a3be-a287958e7bf1)
----
+The firmware polls these Tater endpoints:
 
-## Requirements
+```text
+GET /tater-ha/v1/display/feed
+GET /tater-ha/v1/display/events
+```
 
-- ESP32-S3 Box (ILI9XXX display)
-- ESPHome `2024.12.2` or newer
-- Home Assistant with the following sensors (or equivalents):
-  - Outdoor temperature
-  - Indoor temperature
-  - Wind speed
-  - Rain rate
-  - Lightning strikes
-  - Indoor humidity
-  - Outdoor humidity
-
----
+If Tater voice/display API auth is enabled, set `tater_token` to the same token used by the ESPHome voice routes.
 
 ## Setup
 
-1. Copy the YAML into a new ESPHome device.
-2. Update the **sensor entity IDs** at the top:
-   ```yaml
-   substitutions:
-     sensor_temp_out: sensor.weather_outdoor_temperature
-     sensor_temp_in: sensor.living_room_temperature
-     sensor_humidity_out: sensor.weather_outdoor_humidity
-     sensor_humidity_in: sensor.living_room_humidity
-   ```
+Update the substitutions at the top of [s3box.yaml](s3box.yaml):
 
-## Icons
+```yaml
+substitutions:
+  display_target: livingroom
+  tater_base_url: http://tater.local:8501
+  tater_token: ""
+```
 
-This display uses **Material Design Icons (MDI)** loaded from a remote font file.
+Then adjust the feed slot entity IDs if needed:
 
-Icon codes used in this config:
+```yaml
+sensor_temp_out: sensor.weather_outdoor_temperature
+sensor_temp_in: sensor.living_room_temperature
+sensor_humidity_out: sensor.humidity
+sensor_humidity_in: sensor.up_sense_humidity_level
+sensor_wind_speed: sensor.wind_speed
+sensor_rain_rate: sensor.rain_rate
+sensor_lightning_strikes: sensor.weather_lightning_strikes
+```
 
-- **Wind:** `F059E`
-- **Rain:** `F0597`
-- **Lightning:** `F0593`
+## Requirements
 
-You can browse and search for more icons here:
-https://pictogrammers.com/library/mdi/
-
-When changing icons, update:
-- The glyph list in the `font:` section
-- The icon codes in the display `lambda`
-
----
+- ESPHome 2026.4.0 or newer
+- ESP32-S3 Box class device with PSRAM
+- Tater running the display feed/event API
 
 ## Notes
 
-- Fonts and icons are loaded directly from GitHub (no local files required)
-- Layout and spacing are tuned specifically for the ESP32-S3 Box display
-- Designed to stay simple, fast, and always readable
+- The display now uses LVGL, so the ILI9XXX display is configured with `auto_clear_enabled: false` and `update_interval: never`.
+- Fonts are loaded from the local `fonts/` folder.
+- Camera snapshot rendering is the next layer to add. The Tater event API already carries image URLs; the firmware currently renders the event text first.

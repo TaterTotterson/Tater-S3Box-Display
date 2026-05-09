@@ -1,16 +1,18 @@
 substitutions:
   device_name: tater-display-livingroom
   friendly_name: Tater Display Livingroom
+  display_target: livingroom
 
-  # ─────────────────────────────────────────
-  # EASY TO CHANGE HOME ASSISTANT ENTITIES
-  # ─────────────────────────────────────────
+  # Point this at the Tater host running the voice/display API.
+  tater_base_url: http://tater.local:8501
+  tater_token: ""
+  timezone: America/Chicago
+
+  # Tater display feed slots. These are Home Assistant entity ids already known to Tater.
   sensor_temp_out: sensor.weather_outdoor_temperature
   sensor_temp_in: sensor.living_room_temperature
-
   sensor_humidity_out: sensor.humidity
   sensor_humidity_in: sensor.up_sense_humidity_level
-
   sensor_wind_speed: sensor.wind_speed
   sensor_rain_rate: sensor.rain_rate
   sensor_lightning_strikes: sensor.weather_lightning_strikes
@@ -18,64 +20,75 @@ substitutions:
 esphome:
   name: ${device_name}
   friendly_name: ${friendly_name}
-  min_version: 2024.12.2
+  min_version: 2026.4.0
+  on_boot:
+    priority: -100
+    then:
+      - light.turn_on:
+          id: lcd_backlight
+          brightness: 100%
+      - script.execute: refresh_clock
+      - script.execute: fetch_tater_feed
+      - script.execute: fetch_tater_events
 
 esp32:
-  board: esp32-s3-devkitc-1
-  variant: esp32s3
+  board: esp32s3box
+  flash_size: 16MB
   framework:
     type: esp-idf
     version: recommended
+    sdkconfig_options:
+      CONFIG_ESP32S3_DEFAULT_CPU_FREQ_240: "y"
+      CONFIG_ESP32S3_DATA_CACHE_64KB: "y"
+      CONFIG_ESP32S3_DATA_CACHE_LINE_64B: "y"
+
+psram:
+  mode: octal
+  speed: 80MHz
 
 wifi:
   ssid: !secret wifi_ssid
   password: !secret wifi_password
   use_address: 10.4.20.237
+  on_connect:
+    then:
+      - text_sensor.template.publish:
+          id: connection_status_text
+          state: "Wi-Fi online"
+      - script.execute: fetch_tater_feed
+      - script.execute: fetch_tater_events
+  on_disconnect:
+    then:
+      - text_sensor.template.publish:
+          id: connection_status_text
+          state: "Wi-Fi offline"
 
 logger:
+
 api:
+
 ota:
   - platform: esphome
 
 time:
-  - platform: homeassistant
-    id: ha_time
+  - platform: sntp
+    id: local_time
+    timezone: ${timezone}
+    on_time_sync:
+      then:
+        - script.execute: refresh_clock
+    on_time:
+      - seconds: 0
+        minutes: /1
+        then:
+          - script.execute: refresh_clock
 
-# ─────────────────────────────────────────
-# HOME ASSISTANT SENSORS
-# ─────────────────────────────────────────
-sensor:
-  - platform: homeassistant
-    id: temp_out
-    entity_id: ${sensor_temp_out}
+json:
 
-  - platform: homeassistant
-    id: temp_in
-    entity_id: ${sensor_temp_in}
+http_request:
+  timeout: 4s
+  verify_ssl: false
 
-  - platform: homeassistant
-    id: humidity_out
-    entity_id: ${sensor_humidity_out}
-
-  - platform: homeassistant
-    id: humidity_in
-    entity_id: ${sensor_humidity_in}
-
-  - platform: homeassistant
-    id: wind_speed
-    entity_id: ${sensor_wind_speed}
-
-  - platform: homeassistant
-    id: rain_rate
-    entity_id: ${sensor_rain_rate}
-
-  - platform: homeassistant
-    id: lightning_strikes
-    entity_id: ${sensor_lightning_strikes}
-
-# ─────────────────────────────────────────
-# S3 BOX DISPLAY WIRING
-# ─────────────────────────────────────────
 spi:
   clk_pin: GPIO7
   mosi_pin: GPIO6
@@ -92,73 +105,374 @@ light:
     entity_category: config
     output: backlight_output
     restore_mode: ALWAYS_ON
-    default_transition_length: 50ms
+    default_transition_length: 120ms
 
-# ─────────────────────────────────────────
-# COLORS
-# ─────────────────────────────────────────
-color:
-  - id: black
-    red: 0%
-    green: 0%
-    blue: 0%
-  - id: white
-    red: 100%
-    green: 100%
-    blue: 100%
-  - id: orange
-    red: 100%
-    green: 45%
-    blue: 0%
-
-# ─────────────────────────────────────────
-# SPINNER STATE
-# ─────────────────────────────────────────
 globals:
-  - id: spinner_idx
+  - id: last_event_seq
+    type: int
+    restore_value: no
+    initial_value: "0"
+  - id: event_visible
+    type: bool
+    restore_value: no
+    initial_value: "false"
+  - id: event_until_ms
+    type: uint32_t
+    restore_value: no
+    initial_value: "0"
+  - id: tool_animation_frame
     type: int
     restore_value: no
     initial_value: "0"
 
-interval:
-  - interval: 2s
+font:
+  - file: fonts/consola.ttf
+    id: tater_font_14
+    size: 14
+  - file: fonts/consola.ttf
+    id: tater_font_16
+    size: 16
+  - file: fonts/consola.ttf
+    id: tater_font_18
+    size: 18
+  - file: fonts/consola.ttf
+    id: tater_font_24
+    size: 24
+  - file: fonts/consola.ttf
+    id: tater_font_36
+    size: 36
+  - file: fonts/consola.ttf
+    id: tater_font_56
+    size: 56
+
+text_sensor:
+  - platform: template
+    id: connection_status_text
+    internal: true
+    on_value:
+      then:
+        - lvgl.label.update:
+            id: status_label
+            text: !lambda return x;
+
+  - platform: template
+    id: temp_out_text
+    internal: true
+    on_value:
+      then:
+        - lvgl.label.update:
+            id: temp_out_value
+            text: !lambda return x;
+
+  - platform: template
+    id: temp_in_text
+    internal: true
+    on_value:
+      then:
+        - lvgl.label.update:
+            id: temp_in_value
+            text: !lambda return x;
+
+  - platform: template
+    id: humidity_out_text
+    internal: true
+    on_value:
+      then:
+        - lvgl.label.update:
+            id: humidity_out_value
+            text: !lambda return x;
+
+  - platform: template
+    id: humidity_in_text
+    internal: true
+    on_value:
+      then:
+        - lvgl.label.update:
+            id: humidity_in_value
+            text: !lambda return x;
+
+  - platform: template
+    id: wind_text
+    internal: true
+    on_value:
+      then:
+        - lvgl.label.update:
+            id: wind_value
+            text: !lambda return x;
+
+  - platform: template
+    id: rain_text
+    internal: true
+    on_value:
+      then:
+        - lvgl.label.update:
+            id: rain_value
+            text: !lambda return x;
+
+  - platform: template
+    id: lightning_text
+    internal: true
+    on_value:
+      then:
+        - lvgl.label.update:
+            id: lightning_value
+            text: !lambda return x;
+
+  - platform: template
+    id: event_kind_text
+    internal: true
+    on_value:
+      then:
+        - if:
+            condition:
+              lambda: return x == "tool_call";
+            then:
+              - lvgl.page.show: tool_page
+            else:
+              - lvgl.page.show: event_page
+
+  - platform: template
+    id: event_title_text
+    internal: true
+    on_value:
+      then:
+        - lvgl.label.update:
+            id: event_title_label
+            text: !lambda return x;
+
+  - platform: template
+    id: event_message_text
+    internal: true
+    on_value:
+      then:
+        - lvgl.label.update:
+            id: event_message_label
+            text: !lambda return x;
+        - lvgl.label.update:
+            id: tool_message_label
+            text: !lambda return x;
+
+  - platform: template
+    id: event_description_text
+    internal: true
+    on_value:
+      then:
+        - lvgl.label.update:
+            id: event_description_label
+            text: !lambda return x;
+
+  - platform: template
+    id: event_priority_text
+    internal: true
+    on_value:
+      then:
+        - lvgl.label.update:
+            id: event_priority_label
+            text: !lambda return x;
+
+  - platform: template
+    id: tool_name_text
+    internal: true
+    on_value:
+      then:
+        - lvgl.label.update:
+            id: tool_name_label
+            text: !lambda return x;
+
+  - platform: template
+    id: tool_step_text
+    internal: true
+    on_value:
+      then:
+        - lvgl.label.update:
+            id: tool_step_label
+            text: !lambda return x;
+
+script:
+  - id: refresh_clock
+    mode: restart
+    then:
+      - lvgl.label.update:
+          id: clock_label
+          text:
+            time_format: "%I:%M"
+            time: local_time
+      - lvgl.label.update:
+          id: date_label
+          text:
+            time_format: "%a %b %d"
+            time: local_time
+
+  - id: fetch_tater_feed
+    mode: restart
+    then:
+      - http_request.get:
+          url: !lambda |-
+            return std::string("${tater_base_url}/tater-ha/v1/display/feed")
+              + "?target=${display_target}"
+              + "&selector=${display_target}"
+              + "&temp_out=${sensor_temp_out}"
+              + "&temp_in=${sensor_temp_in}"
+              + "&humidity_out=${sensor_humidity_out}"
+              + "&humidity_in=${sensor_humidity_in}"
+              + "&wind_speed=${sensor_wind_speed}"
+              + "&rain_rate=${sensor_rain_rate}"
+              + "&lightning_strikes=${sensor_lightning_strikes}";
+          request_headers:
+            X-Tater-Token: "${tater_token}"
+          capture_response: true
+          on_response:
+            then:
+              - if:
+                  condition:
+                    lambda: return response->status_code == 200;
+                  then:
+                    - text_sensor.template.publish:
+                        id: connection_status_text
+                        state: "Tater online"
+                    - lambda: |-
+                        json::parse_json(body, [](JsonObject root) -> bool {
+                          JsonObject text = root["text"].as<JsonObject>();
+                          id(temp_out_text).publish_state(text["temp_out"] | "--");
+                          id(temp_in_text).publish_state(text["temp_in"] | "--");
+                          id(humidity_out_text).publish_state(text["humidity_out"] | "--");
+                          id(humidity_in_text).publish_state(text["humidity_in"] | "--");
+                          id(wind_text).publish_state(text["wind_speed"] | "--");
+                          id(rain_text).publish_state(text["rain_rate"] | "--");
+                          id(lightning_text).publish_state(text["lightning_strikes"] | "--");
+                          return true;
+                        });
+                  else:
+                    - text_sensor.template.publish:
+                        id: connection_status_text
+                        state: "Tater offline"
+          on_error:
+            then:
+              - text_sensor.template.publish:
+                  id: connection_status_text
+                  state: "Tater offline"
+
+  - id: fetch_tater_events
+    mode: restart
+    then:
+      - http_request.get:
+          url: !lambda |-
+            return std::string("${tater_base_url}/tater-ha/v1/display/events")
+              + "?target=${display_target}"
+              + "&after_seq=" + std::to_string(id(last_event_seq))
+              + "&limit=4";
+          request_headers:
+            X-Tater-Token: "${tater_token}"
+          capture_response: true
+          on_response:
+            then:
+              - if:
+                  condition:
+                    lambda: return response->status_code == 200;
+                  then:
+                    - lambda: |-
+                        json::parse_json(body, [](JsonObject root) -> bool {
+                          int last_seq = root["last_seq"] | id(last_event_seq);
+                          if (last_seq > id(last_event_seq)) {
+                            id(last_event_seq) = last_seq;
+                          }
+
+                          JsonArray events = root["events"].as<JsonArray>();
+                          if (events.size() == 0) {
+                            return true;
+                          }
+
+                          JsonObject event = events[events.size() - 1].as<JsonObject>();
+                          const char *kind = event["kind"] | "notification";
+                          const char *title = event["title"] | "";
+                          const char *message = event["message"] | "";
+                          const char *description = event["description"] | "";
+                          const char *priority = event["priority"] | "normal";
+                          const char *tool = event["tool"] | "";
+                          int step_index = event["step_index"] | 0;
+                          int step_total = event["step_total"] | 0;
+                          int ttl = event["ttl_seconds"] | 18;
+
+                          std::string kind_text = kind == nullptr ? "notification" : std::string(kind);
+                          if (title == nullptr || title[0] == '\0') {
+                            title = kind_text == "tool_call" ? "Tool Call" : "Tater";
+                          }
+                          if ((message == nullptr || message[0] == '\0') && description != nullptr) {
+                            message = description;
+                          }
+
+                          id(event_title_text).publish_state(title);
+                          id(event_message_text).publish_state(message == nullptr ? "" : message);
+                          id(event_description_text).publish_state(description == nullptr ? "" : description);
+                          id(event_priority_text).publish_state(priority == nullptr ? "normal" : priority);
+                          id(tool_name_text).publish_state(
+                            tool != nullptr && tool[0] != '\0' ? tool : "Tater is working"
+                          );
+
+                          static char step_buf[16];
+                          if (step_index > 0 && step_total > 0) {
+                            snprintf(step_buf, sizeof(step_buf), "%d/%d", step_index, step_total);
+                          } else {
+                            snprintf(step_buf, sizeof(step_buf), "running");
+                          }
+                          id(tool_step_text).publish_state(step_buf);
+
+                          id(event_visible) = true;
+                          if (ttl < 6) {
+                            ttl = 6;
+                          }
+                          if (ttl > 90) {
+                            ttl = 90;
+                          }
+                          id(event_until_ms) = millis() + (uint32_t) ttl * 1000U;
+                          id(event_kind_text).publish_state(kind);
+                          return true;
+                        });
+
+  - id: animate_tool_call
+    mode: restart
     then:
       - lambda: |-
-          id(spinner_idx) = (id(spinner_idx) + 1) % 3;
+          id(tool_animation_frame) = (id(tool_animation_frame) + 1) % 6;
+      - lvgl.label.update:
+          id: tool_motion_label
+          text: !lambda |-
+            static const char * const frames[] = {
+              "o                o",
+              "  o            o  ",
+              "    o        o    ",
+              "      o    o      ",
+              "        oo        ",
+              "      o    o      "
+            };
+            return frames[id(tool_animation_frame)];
 
-# ─────────────────────────────────────────
-# FONTS + ICONS
-# ─────────────────────────────────────────
-font:
-  # Text fonts
-  - file: "https://github.com/TaterTotterson/S3Box-HomeAssistant/raw/refs/heads/main/fonts/consola.ttf"
-    id: consola_20
-    size: 20
+interval:
+  - interval: 1s
+    then:
+      - script.execute: refresh_clock
+      - if:
+          condition:
+            lambda: return id(event_visible) && id(event_until_ms) != 0 && millis() > id(event_until_ms);
+          then:
+            - lambda: |-
+                id(event_visible) = false;
+                id(event_until_ms) = 0;
+            - lvgl.page.show: home_page
+      - if:
+          condition:
+            lambda: return id(event_visible) && id(event_kind_text).state == "tool_call";
+          then:
+            - script.execute: animate_tool_call
 
-  - file: "https://github.com/TaterTotterson/S3Box-HomeAssistant/raw/refs/heads/main/fonts/consola.ttf"
-    id: consola_30
-    size: 30
+  - interval: 10s
+    then:
+      - script.execute: fetch_tater_feed
 
-  - file: "https://github.com/TaterTotterson/S3Box-HomeAssistant/raw/refs/heads/main/fonts/consola.ttf"
-    id: consola_40
-    size: 40
+  - interval: 2s
+    then:
+      - script.execute: fetch_tater_events
 
-  - file: "https://github.com/TaterTotterson/S3Box-HomeAssistant/raw/refs/heads/main/fonts/consola.ttf"
-    id: consola_60
-    size: 60
-
-  # Icons (MDI)
-  - file: "https://github.com/TaterTotterson/S3Box-HomeAssistant/raw/refs/heads/main/fonts/materialdesignicons-webfont.ttf"
-    id: mdi_80
-    size: 80
-    glyphs:
-      - "\U000F059E" # wind
-      - "\U000F0597" # rain
-      - "\U000F0593" # lightning
-
-# ─────────────────────────────────────────
-# DISPLAY
-# ─────────────────────────────────────────
 display:
   - platform: ili9xxx
     id: s3_box_lcd
@@ -170,47 +484,354 @@ display:
       number: GPIO48
       inverted: true
     invert_colors: false
-    update_interval: 1s
-    lambda: |-
-      auto now = id(ha_time).now();
-      if (!now.is_valid()) {
-        it.fill(id(black));
-        it.print(160, 120, id(consola_40), id(white), TextAlign::CENTER, "Waiting for HA...");
-        return;
-      }
+    auto_clear_enabled: false
+    update_interval: never
 
-      it.fill(id(black));
+lvgl:
+  displays:
+    - s3_box_lcd
+  buffer_size: 25%
+  style_definitions:
+    - id: screen_style
+      bg_color: 0x111213
+      bg_opa: COVER
+      border_width: 0
+      pad_all: 0
+    - id: panel_style
+      bg_color: 0x1A1B1D
+      bg_opa: COVER
+      border_color: 0x2A2C30
+      border_width: 1
+      radius: 8
+      pad_all: 8
+    - id: rail_style
+      bg_color: 0x2A2C30
+      bg_opa: COVER
+      border_width: 0
+      radius: 2
+      pad_all: 0
+  pages:
+    - id: home_page
+      styles: screen_style
+      widgets:
+        - obj:
+            x: 0
+            y: 0
+            width: 320
+            height: 34
+            bg_color: 0x151617
+            bg_opa: COVER
+            border_width: 0
+            radius: 0
+            pad_all: 0
+            widgets:
+              - label:
+                  x: 10
+                  y: 8
+                  text: "Tater"
+                  text_font: tater_font_18
+                  text_color: 0xF08345
+              - label:
+                  id: status_label
+                  x: 210
+                  y: 10
+                  width: 100
+                  text: "starting"
+                  text_align: RIGHT
+                  long_mode: DOT
+                  text_font: tater_font_14
+                  text_color: 0xA8A096
+        - label:
+            id: date_label
+            x: 0
+            y: 44
+            width: 320
+            text: "--- --"
+            text_align: CENTER
+            text_font: tater_font_18
+            text_color: 0xA8A096
+        - label:
+            id: clock_label
+            x: 0
+            y: 62
+            width: 320
+            text: "--:--"
+            text_align: CENTER
+            text_font: tater_font_56
+            text_color: 0xF1EEE8
+        - obj:
+            x: 12
+            y: 128
+            width: 142
+            height: 62
+            styles: panel_style
+            widgets:
+              - label:
+                  x: 0
+                  y: 0
+                  width: 126
+                  text: "Inside"
+                  text_font: tater_font_14
+                  text_color: 0xA8A096
+              - label:
+                  id: temp_in_value
+                  x: 0
+                  y: 18
+                  width: 70
+                  text: "--"
+                  text_font: tater_font_24
+                  text_color: 0xF08345
+              - label:
+                  id: humidity_in_value
+                  x: 74
+                  y: 23
+                  width: 52
+                  text: "--"
+                  text_align: RIGHT
+                  text_font: tater_font_18
+                  text_color: 0xF1EEE8
+        - obj:
+            x: 166
+            y: 128
+            width: 142
+            height: 62
+            styles: panel_style
+            widgets:
+              - label:
+                  x: 0
+                  y: 0
+                  width: 126
+                  text: "Outside"
+                  text_font: tater_font_14
+                  text_color: 0xA8A096
+              - label:
+                  id: temp_out_value
+                  x: 0
+                  y: 18
+                  width: 70
+                  text: "--"
+                  text_font: tater_font_24
+                  text_color: 0xF08345
+              - label:
+                  id: humidity_out_value
+                  x: 74
+                  y: 23
+                  width: 52
+                  text: "--"
+                  text_align: RIGHT
+                  text_font: tater_font_18
+                  text_color: 0xF1EEE8
+        - obj:
+            x: 12
+            y: 202
+            width: 90
+            height: 28
+            styles: panel_style
+            widgets:
+              - label:
+                  x: 0
+                  y: -1
+                  text: "Wind"
+                  text_font: tater_font_14
+                  text_color: 0xA8A096
+              - label:
+                  id: wind_value
+                  x: 40
+                  y: -1
+                  width: 34
+                  text: "--"
+                  text_align: RIGHT
+                  text_font: tater_font_14
+                  text_color: 0xF1EEE8
+        - obj:
+            x: 114
+            y: 202
+            width: 90
+            height: 28
+            styles: panel_style
+            widgets:
+              - label:
+                  x: 0
+                  y: -1
+                  text: "Rain"
+                  text_font: tater_font_14
+                  text_color: 0xA8A096
+              - label:
+                  id: rain_value
+                  x: 40
+                  y: -1
+                  width: 34
+                  text: "--"
+                  text_align: RIGHT
+                  text_font: tater_font_14
+                  text_color: 0xF1EEE8
+        - obj:
+            x: 216
+            y: 202
+            width: 92
+            height: 28
+            styles: panel_style
+            widgets:
+              - label:
+                  x: 0
+                  y: -1
+                  text: "Storm"
+                  text_font: tater_font_14
+                  text_color: 0xA8A096
+              - label:
+                  id: lightning_value
+                  x: 48
+                  y: -1
+                  width: 28
+                  text: "--"
+                  text_align: RIGHT
+                  text_font: tater_font_14
+                  text_color: 0xF1EEE8
 
-      // DATE
-      it.strftime(160, 6, id(consola_30), id(white), TextAlign::TOP_CENTER, "%A %b %d", now);
+    - id: event_page
+      styles: screen_style
+      widgets:
+        - obj:
+            x: 0
+            y: 0
+            width: 320
+            height: 34
+            bg_color: 0x151617
+            bg_opa: COVER
+            border_width: 0
+            radius: 0
+            pad_all: 0
+            widgets:
+              - label:
+                  x: 10
+                  y: 8
+                  text: "Tater"
+                  text_font: tater_font_18
+                  text_color: 0xF08345
+              - label:
+                  id: event_priority_label
+                  x: 218
+                  y: 10
+                  width: 92
+                  text: "normal"
+                  text_align: RIGHT
+                  long_mode: DOT
+                  text_font: tater_font_14
+                  text_color: 0xA8A096
+        - obj:
+            x: 12
+            y: 48
+            width: 296
+            height: 180
+            styles: panel_style
+            widgets:
+              - label:
+                  id: event_title_label
+                  x: 0
+                  y: 0
+                  width: 280
+                  text: "Notification"
+                  long_mode: DOT
+                  text_font: tater_font_24
+                  text_color: 0xF08345
+              - obj:
+                  x: 0
+                  y: 42
+                  width: 280
+                  height: 3
+                  styles: rail_style
+              - label:
+                  id: event_message_label
+                  x: 0
+                  y: 58
+                  width: 280
+                  height: 52
+                  text: ""
+                  long_mode: WRAP
+                  text_font: tater_font_18
+                  text_color: 0xF1EEE8
+              - label:
+                  id: event_description_label
+                  x: 0
+                  y: 118
+                  width: 280
+                  height: 44
+                  text: ""
+                  long_mode: WRAP
+                  text_font: tater_font_14
+                  text_color: 0xA8A096
 
-      // TIME
-      it.strftime(160, 42, id(consola_60), id(white), TextAlign::TOP_CENTER, "%I:%M", now);
-      it.strftime(285, 68, id(consola_30), id(orange), TextAlign::TOP_RIGHT, "%p", now);
-
-      // IN (label same, temp same size, humidity smaller)
-      it.printf(10, 160, id(consola_30), id(white), "IN");
-      it.printf(10, 185, id(consola_30), id(orange), "%.1f", id(temp_in).state);
-      it.printf(10, 212, id(consola_20), id(white), "%.0f%%", id(humidity_in).state);
-
-      // OUT (label same, temp same size, humidity smaller)
-      it.printf(310, 160, id(consola_30), id(white), TextAlign::TOP_RIGHT, "OUT");
-      it.printf(310, 185, id(consola_30), id(orange), TextAlign::TOP_RIGHT, "%.1f", id(temp_out).state);
-      it.printf(310, 212, id(consola_20), id(white), TextAlign::TOP_RIGHT, "%.0f%%", id(humidity_out).state);
-
-      // Spinner icons
-      const char* icons[] = {
-        "\U000F059E", // wind
-        "\U000F0597", // rain
-        "\U000F0593"  // lightning
-      };
-
-      it.print(160, 105, id(mdi_80), id(orange), TextAlign::TOP_CENTER, icons[id(spinner_idx)]);
-
-      // Spinner value
-      float value = 0.0f;
-      if (id(spinner_idx) == 0) value = id(wind_speed).state;
-      else if (id(spinner_idx) == 1) value = id(rain_rate).state;
-      else value = id(lightning_strikes).state;
-
-      it.printf(160, 182, id(consola_30), id(white), TextAlign::TOP_CENTER, "%.1f", value);
+    - id: tool_page
+      styles: screen_style
+      widgets:
+        - obj:
+            x: 0
+            y: 0
+            width: 320
+            height: 34
+            bg_color: 0x151617
+            bg_opa: COVER
+            border_width: 0
+            radius: 0
+            pad_all: 0
+            widgets:
+              - label:
+                  x: 10
+                  y: 8
+                  text: "Tater"
+                  text_font: tater_font_18
+                  text_color: 0xF08345
+              - label:
+                  id: tool_step_label
+                  x: 244
+                  y: 10
+                  width: 66
+                  text: "running"
+                  text_align: RIGHT
+                  long_mode: DOT
+                  text_font: tater_font_14
+                  text_color: 0xA8A096
+        - label:
+            x: 0
+            y: 56
+            width: 320
+            text: "Tool Call"
+            text_align: CENTER
+            text_font: tater_font_24
+            text_color: 0xF08345
+        - obj:
+            x: 52
+            y: 100
+            width: 216
+            height: 4
+            styles: rail_style
+        - label:
+            id: tool_motion_label
+            x: 52
+            y: 82
+            width: 216
+            text: "o                o"
+            text_align: CENTER
+            text_font: tater_font_24
+            text_color: 0xF08345
+        - label:
+            id: tool_name_label
+            x: 20
+            y: 124
+            width: 280
+            text: "Tater is working"
+            text_align: CENTER
+            long_mode: DOT
+            text_font: tater_font_18
+            text_color: 0xF1EEE8
+        - label:
+            id: tool_message_label
+            x: 24
+            y: 158
+            width: 272
+            height: 52
+            text: "I'm working on that now."
+            text_align: CENTER
+            long_mode: WRAP
+            text_font: tater_font_16
+            text_color: 0xA8A096
