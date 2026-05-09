@@ -29,6 +29,7 @@ Update the substitutions at the top of [s3box.yaml](s3box.yaml):
 substitutions:
   device_name: taters3box
   friendly_name: taterS3Box
+  tater_first_name: Tater
   display_target: livingroom
   tater_base_url: http://tater.local:8501
   tater_token: ""

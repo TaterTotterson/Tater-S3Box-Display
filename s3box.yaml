@@ -1,6 +1,7 @@
 substitutions:
   device_name: taters3box
   friendly_name: taterS3Box
+  tater_first_name: Tater
   display_target: livingroom
 
   # Point this at the Tater host running the voice/display API.
@@ -419,7 +420,7 @@ script:
 
                           std::string kind_text = kind == nullptr ? "notification" : std::string(kind);
                           if (title == nullptr || title[0] == '\0') {
-                            title = kind_text == "tool_call" ? "Tool Call" : "Tater";
+                            title = kind_text == "tool_call" ? "Tool Call" : "${tater_first_name}";
                           }
                           if ((message == nullptr || message[0] == '\0') && description != nullptr) {
                             message = description;
@@ -430,7 +431,7 @@ script:
                           id(event_description_text).publish_state(description == nullptr ? "" : description);
                           id(event_priority_text).publish_state(priority == nullptr ? "normal" : priority);
                           id(tool_name_text).publish_state(
-                            tool != nullptr && tool[0] != '\0' ? tool : "Tater is working"
+                            tool != nullptr && tool[0] != '\0' ? tool : "${tater_first_name} is working"
                           );
 
                           static char step_buf[16];
@@ -561,14 +562,16 @@ lvgl:
               - label:
                   x: 10
                   y: 8
-                  text: "Tater"
+                  width: 86
+                  text: "${tater_first_name}"
+                  long_mode: DOT
                   text_font: tater_font_18
                   text_color: 0xF08345
               - label:
                   id: status_label
-                  x: 210
+                  x: 100
                   y: 10
-                  width: 100
+                  width: 210
                   text: "starting"
                   text_align: RIGHT
                   long_mode: DOT
@@ -738,7 +741,9 @@ lvgl:
               - label:
                   x: 10
                   y: 8
-                  text: "Tater"
+                  width: 86
+                  text: "${tater_first_name}"
+                  long_mode: DOT
                   text_font: tater_font_18
                   text_color: 0xF08345
               - label:
@@ -811,7 +816,9 @@ lvgl:
               - label:
                   x: 10
                   y: 8
-                  text: "Tater"
+                  width: 86
+                  text: "${tater_first_name}"
+                  long_mode: DOT
                   text_font: tater_font_18
                   text_color: 0xF08345
               - label:
@@ -852,7 +859,7 @@ lvgl:
             x: 20
             y: 124
             width: 280
-            text: "Tater is working"
+            text: "${tater_first_name} is working"
             text_align: CENTER
             long_mode: DOT
             text_font: tater_font_18
