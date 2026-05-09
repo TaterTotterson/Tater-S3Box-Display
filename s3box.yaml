@@ -23,6 +23,14 @@ substitutions:
   sensor_rain_rate: sensor.rain_rate
   sensor_lightning_strikes: sensor.weather_lightning_strikes
 
+  # Tater voice / microWakeWord
+  wake_word_name: hey_tater
+  wake_word_model_url: https://raw.githubusercontent.com/TaterTotterson/microWakeWords/refs/heads/main/microWakeWords/hey_tater.json
+  wake_model_stop_url: https://github.com/kahrendt/microWakeWord/releases/download/stop/stop.json
+  wake_cutoff_slight: "250"
+  wake_cutoff_moderate: "245"
+  wake_cutoff_very: "222"
+
 esphome:
   name: ${device_name}
   friendly_name: ${friendly_name}
@@ -82,6 +90,16 @@ ota:
 
 captive_portal:
 
+external_components:
+  - source:
+      type: git
+      url: https://github.com/TaterTotterson/microWakeWords
+      ref: main
+    components:
+      - voice_assistant
+      - micro_wake_word
+    refresh: 0s
+
 time:
   - platform: sntp
     id: local_time
@@ -100,6 +118,64 @@ json:
 http_request:
   timeout: 2s
   verify_ssl: false
+
+i2c:
+  - id: i2c_adc_dac
+    scl: GPIO18
+    sda: GPIO8
+
+i2s_audio:
+  - id: i2s_audio_bus
+    i2s_lrclk_pin:
+      number: GPIO45
+      ignore_strapping_warning: true
+    i2s_bclk_pin: GPIO17
+    i2s_mclk_pin: GPIO2
+
+audio_adc:
+  - platform: es7210
+    i2c_id: i2c_adc_dac
+    id: es7210_adc
+    bits_per_sample: 16bit
+    sample_rate: 16000
+
+audio_dac:
+  - platform: es8311
+    i2c_id: i2c_adc_dac
+    id: es8311_dac
+    bits_per_sample: 16bit
+    sample_rate: 48000
+
+microphone:
+  - platform: i2s_audio
+    id: box_mic
+    sample_rate: 16000
+    i2s_din_pin: GPIO16
+    bits_per_sample: 16bit
+    adc_type: external
+
+speaker:
+  - platform: i2s_audio
+    id: box_speaker
+    i2s_dout_pin: GPIO15
+    dac_type: external
+    sample_rate: 48000
+    bits_per_sample: 16bit
+    channel: left
+    audio_dac: es8311_dac
+    buffer_duration: 100ms
+
+media_player:
+  - platform: speaker
+    id: speaker_media_player
+    name: Speaker
+    volume_min: 0.35
+    volume_max: 0.85
+    announcement_pipeline:
+      speaker: box_speaker
+      format: FLAC
+      sample_rate: 48000
+      num_channels: 1
 
 spi:
   - id: spi_bus
@@ -137,6 +213,257 @@ globals:
     type: int
     restore_value: no
     initial_value: "0"
+  - id: voice_assistant_phase
+    type: int
+    restore_value: no
+    initial_value: "10"
+
+micro_wake_word:
+  id: mww
+  models:
+    - model: ${wake_word_model_url}
+      id: ${wake_word_name}
+    - model: ${wake_model_stop_url}
+      id: stop
+      internal: true
+  vad:
+  microphone:
+    microphone: box_mic
+    channels: 0
+    gain_factor: 4
+  stop_after_detection: false
+  on_wake_word_detected:
+    - logger.log:
+        level: INFO
+        tag: tater.voice
+        format: "Wake word detected: %s"
+        args: ["wake_word.c_str()"]
+    - if:
+        condition:
+          switch.is_off: master_mute_switch
+        then:
+          - if:
+              condition:
+                voice_assistant.is_running:
+              then:
+                - voice_assistant.stop:
+              else:
+                - voice_assistant.start:
+                    wake_word: !lambda return wake_word;
+
+voice_assistant:
+  id: va
+  microphone:
+    microphone: box_mic
+    channels: 0
+  media_player: speaker_media_player
+  micro_wake_word: mww
+  use_wake_word: false
+  noise_suppression_level: 0
+  auto_gain: 0 dbfs
+  volume_multiplier: 1
+  on_client_connected:
+    - logger.log:
+        level: INFO
+        tag: tater.voice
+        format: "Voice assistant client connected; starting wake word detection."
+    - lambda: |-
+        id(mww).set_capture_upload_enabled(id(capture_wake_audio).state);
+        id(mww).set_capture_close_misses_enabled(id(capture_close_misses).state);
+        id(mww).set_capture_close_miss_probability_cutoff(id(close_miss_threshold).state);
+        id(mww).set_capture_upload_url(id(trainer_app_url).state);
+    - micro_wake_word.start:
+    - micro_wake_word.enable_model: ${wake_word_name}
+    - micro_wake_word.disable_model: stop
+    - lambda: id(voice_assistant_phase) = 1;
+    - text_sensor.template.publish:
+        id: connection_status_text
+        state: "Voice ready"
+  on_client_disconnected:
+    - logger.log:
+        level: WARN
+        tag: tater.voice
+        format: "Voice assistant client disconnected; stopping wake word detection."
+    - voice_assistant.stop:
+    - micro_wake_word.stop:
+    - lambda: id(voice_assistant_phase) = 10;
+    - text_sensor.template.publish:
+        id: connection_status_text
+        state: "Voice offline"
+  on_error:
+    - if:
+        condition:
+          and:
+            - lambda: return code != "duplicate_wake_up_detected";
+            - lambda: return code != "stt-no-text-recognized";
+        then:
+          - lambda: id(voice_assistant_phase) = 11;
+          - text_sensor.template.publish:
+              id: connection_status_text
+              state: "Voice error"
+  on_start:
+    - micro_wake_word.disable_model: ${wake_word_name}
+    - text_sensor.template.publish:
+        id: connection_status_text
+        state: "Voice active"
+  on_listening:
+    - lambda: id(voice_assistant_phase) = 2;
+    - text_sensor.template.publish:
+        id: connection_status_text
+        state: "Listening"
+  on_stt_vad_start:
+    - lambda: id(voice_assistant_phase) = 3;
+    - text_sensor.template.publish:
+        id: connection_status_text
+        state: "Hearing you"
+  on_stt_vad_end:
+    - lambda: id(voice_assistant_phase) = 4;
+    - text_sensor.template.publish:
+        id: connection_status_text
+        state: "Thinking"
+  on_tool_call_start:
+    - lambda: id(voice_assistant_phase) = 6;
+    - lambda: |-
+        id(event_visible) = true;
+        id(event_until_ms) = millis() + 30000U;
+    - text_sensor.template.publish:
+        id: event_kind_text
+        state: "tool_call"
+    - text_sensor.template.publish:
+        id: tool_name_text
+        state: !lambda |-
+          if (!x.empty()) {
+            return x;
+          }
+          return std::string("${tater_first_name} is working");
+    - text_sensor.template.publish:
+        id: event_message_text
+        state: "I'm working on that now."
+    - text_sensor.template.publish:
+        id: tool_step_text
+        state: "running"
+  on_intent_progress:
+    - if:
+        condition:
+          lambda: "return !x.empty();"
+        then:
+          - lambda: id(voice_assistant_phase) = 5;
+          - text_sensor.template.publish:
+              id: connection_status_text
+              state: "Replying"
+          - script.execute: activate_stop_word_once
+  on_tts_start:
+    - lambda: id(voice_assistant_phase) = 5;
+    - text_sensor.template.publish:
+        id: connection_status_text
+        state: "Replying"
+    - script.execute: activate_stop_word_once
+  on_end:
+    - wait_until:
+        not:
+          voice_assistant.is_running:
+    - script.stop: activate_stop_word_once
+    - micro_wake_word.disable_model: stop
+    - micro_wake_word.enable_model: ${wake_word_name}
+    - lambda: id(voice_assistant_phase) = 1;
+    - text_sensor.template.publish:
+        id: connection_status_text
+        state: "Voice ready"
+    - script.execute: show_home_if_no_event
+
+switch:
+  - platform: template
+    id: master_mute_switch
+    name: Microphone Mute
+    icon: mdi:microphone-off
+    entity_category: config
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_OFF
+    turn_on_action:
+      - microphone.mute:
+      - text_sensor.template.publish:
+          id: connection_status_text
+          state: "Muted"
+    turn_off_action:
+      - microphone.unmute:
+      - text_sensor.template.publish:
+          id: connection_status_text
+          state: "Voice ready"
+
+  - platform: template
+    id: capture_wake_audio
+    name: Capture Wake Audio
+    icon: mdi:waveform
+    entity_category: config
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_OFF
+    turn_on_action:
+      - lambda: id(mww).set_capture_upload_enabled(true);
+    turn_off_action:
+      - lambda: id(mww).set_capture_upload_enabled(false);
+
+  - platform: template
+    id: capture_close_misses
+    name: Capture Close Misses
+    icon: mdi:target
+    entity_category: config
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_OFF
+    turn_on_action:
+      - lambda: id(mww).set_capture_close_misses_enabled(true);
+    turn_off_action:
+      - lambda: id(mww).set_capture_close_misses_enabled(false);
+
+text:
+  - platform: template
+    id: trainer_app_url
+    name: Trainer App URL
+    icon: mdi:lan-connect
+    entity_category: config
+    optimistic: true
+    restore_value: true
+    initial_value: "http://trainer.local:8789"
+    mode: TEXT
+    max_length: 255
+    set_action:
+      - lambda: id(mww).set_capture_upload_url(x);
+
+number:
+  - platform: template
+    id: close_miss_threshold
+    name: Close Miss Threshold
+    icon: mdi:target-variant
+    entity_category: config
+    optimistic: true
+    restore_value: true
+    initial_value: 0.78
+    min_value: 0.50
+    max_value: 0.95
+    step: 0.01
+    set_action:
+      - lambda: id(mww).set_capture_close_miss_probability_cutoff(x);
+
+select:
+  - platform: template
+    id: wake_word_sensitivity
+    name: Wake Word Sensitivity
+    entity_category: config
+    optimistic: true
+    initial_option: Slightly sensitive
+    restore_value: true
+    options:
+      - Slightly sensitive
+      - Moderately sensitive
+      - Very sensitive
+    on_value:
+      lambda: |-
+        if (x == "Slightly sensitive") {
+          id(${wake_word_name}).set_probability_cutoff(${wake_cutoff_slight});
+        } else if (x == "Moderately sensitive") {
+          id(${wake_word_name}).set_probability_cutoff(${wake_cutoff_moderate});
+        } else if (x == "Very sensitive") {
+          id(${wake_word_name}).set_probability_cutoff(${wake_cutoff_very});
+        }
 
 font:
   - file:
@@ -327,6 +654,33 @@ script:
           text:
             time_format: "%a %b %d"
             time: local_time
+
+  - id: show_home_if_no_event
+    mode: restart
+    then:
+      - if:
+          condition:
+            lambda: return !id(event_visible);
+          then:
+            - lvgl.page.show: home_page
+
+  - id: activate_stop_word_once
+    mode: restart
+    then:
+      - wait_until:
+          condition:
+            media_player.is_announcing:
+              id: speaker_media_player
+          timeout: 5s
+      - delay: 1s
+      - micro_wake_word.enable_model: stop
+      - wait_until:
+          condition:
+            not:
+              media_player.is_announcing:
+                id: speaker_media_player
+          timeout: 90s
+      - micro_wake_word.disable_model: stop
 
   - id: fetch_tater_feed
     mode: single
