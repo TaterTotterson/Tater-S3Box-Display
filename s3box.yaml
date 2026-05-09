@@ -7,7 +7,6 @@ substitutions:
   # Point this at the Tater host running the voice/display API.
   tater_base_url: http://tater.local:8501
   tater_token: ""
-  api_password: ""
   timezone: America/Chicago
 
   # Wi-Fi / OTA target
@@ -98,7 +97,6 @@ logger:
 
 api:
   reboot_timeout: 0s
-  password: "${api_password}"
 
 ota:
   - platform: esphome
