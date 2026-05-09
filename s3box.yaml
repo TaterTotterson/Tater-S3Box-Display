@@ -8,6 +8,11 @@ substitutions:
   tater_token: ""
   timezone: America/Chicago
 
+  # Wi-Fi / OTA target
+  wifi_ssid: !secret wifi_ssid
+  wifi_password: !secret wifi_password
+  device_ip: 10.4.20.237
+
   # Tater display feed slots. These are Home Assistant entity ids already known to Tater.
   sensor_temp_out: sensor.weather_outdoor_temperature
   sensor_temp_in: sensor.living_room_temperature
@@ -47,9 +52,9 @@ psram:
   speed: 80MHz
 
 wifi:
-  ssid: !secret wifi_ssid
-  password: !secret wifi_password
-  use_address: 10.4.20.237
+  ssid: ${wifi_ssid}
+  password: ${wifi_password}
+  use_address: ${device_ip}
   on_connect:
     then:
       - text_sensor.template.publish:

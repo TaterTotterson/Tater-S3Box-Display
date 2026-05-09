@@ -30,6 +30,9 @@ substitutions:
   display_target: livingroom
   tater_base_url: http://tater.local:8501
   tater_token: ""
+  wifi_ssid: !secret wifi_ssid
+  wifi_password: !secret wifi_password
+  device_ip: 10.4.20.237
 ```
 
 Then adjust the feed slot entity IDs if needed:
