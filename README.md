@@ -58,5 +58,5 @@ sensor_lightning_strikes: sensor.weather_lightning_strikes
 ## Notes
 
 - The display now uses LVGL, so the ILI9XXX display is configured with `auto_clear_enabled: false` and `update_interval: never`.
-- Fonts are loaded from the local `fonts/` folder.
+- Fonts use ESPHome's Google Fonts support so the Tater firmware builder can compile the fetched YAML without extra local assets.
 - Camera snapshot rendering is the next layer to add. The Tater event API already carries image URLs; the firmware currently renders the event text first.

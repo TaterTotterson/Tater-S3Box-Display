@@ -131,22 +131,34 @@ globals:
     initial_value: "0"
 
 font:
-  - file: fonts/consola.ttf
+  - file:
+      type: gfonts
+      family: Roboto Mono
     id: tater_font_14
     size: 14
-  - file: fonts/consola.ttf
+  - file:
+      type: gfonts
+      family: Roboto Mono
     id: tater_font_16
     size: 16
-  - file: fonts/consola.ttf
+  - file:
+      type: gfonts
+      family: Roboto Mono
     id: tater_font_18
     size: 18
-  - file: fonts/consola.ttf
+  - file:
+      type: gfonts
+      family: Roboto Mono
     id: tater_font_24
     size: 24
-  - file: fonts/consola.ttf
+  - file:
+      type: gfonts
+      family: Roboto Mono
     id: tater_font_36
     size: 36
-  - file: fonts/consola.ttf
+  - file:
+      type: gfonts
+      family: Roboto Mono
     id: tater_font_56
     size: 56
 
