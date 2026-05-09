@@ -27,7 +27,6 @@ substitutions:
   # Tater voice / microWakeWord
   wake_word_name: hey_tater
   wake_word_model_url: https://raw.githubusercontent.com/TaterTotterson/microWakeWords/refs/heads/main/microWakeWords/hey_tater.json
-  wake_model_stop_url: https://github.com/kahrendt/microWakeWord/releases/download/stop/stop.json
   wake_cutoff_slight: "250"
   wake_cutoff_moderate: "245"
   wake_cutoff_very: "222"
@@ -184,9 +183,9 @@ speaker:
 media_player:
   - platform: speaker
     id: speaker_media_player
-    name: Speaker
-    volume_min: 0.35
-    volume_max: 0.85
+    name: None
+    volume_min: 0.5
+    volume_max: 0.8
     announcement_pipeline:
       speaker: box_speaker
       format: FLAC
@@ -197,8 +196,17 @@ media_player:
           condition:
             - microphone.is_capturing:
           then:
-            - script.stop: activate_stop_word_once
             - micro_wake_word.stop:
+    on_idle:
+      - if:
+          condition:
+            and:
+              - not:
+                  voice_assistant.is_running:
+              - switch.is_off: master_mute_switch
+          then:
+            - micro_wake_word.start:
+            - script.execute: show_home_if_no_event
 
 spi:
   - id: spi_bus
@@ -250,15 +258,11 @@ micro_wake_word:
   models:
     - model: ${wake_word_model_url}
       id: ${wake_word_name}
-    - model: ${wake_model_stop_url}
-      id: stop
-      internal: true
   vad:
   microphone:
     microphone: box_mic
     channels: 0
     gain_factor: 4
-  stop_after_detection: false
   on_wake_word_detected:
     - logger.log:
         level: INFO
@@ -275,22 +279,18 @@ micro_wake_word:
               then:
                 - voice_assistant.stop:
               else:
-                - micro_wake_word.stop:
-                - delay: 100ms
                 - voice_assistant.start:
                     wake_word: !lambda return wake_word;
 
 voice_assistant:
   id: va
-  microphone:
-    microphone: box_mic
-    channels: 0
+  microphone: box_mic
   media_player: speaker_media_player
   micro_wake_word: mww
   use_wake_word: false
-  noise_suppression_level: 0
-  auto_gain: 0 dbfs
-  volume_multiplier: 1
+  noise_suppression_level: 2
+  auto_gain: 31dBFS
+  volume_multiplier: 2.0
   on_client_connected:
     - logger.log:
         level: INFO
@@ -302,8 +302,6 @@ voice_assistant:
         id(mww).set_capture_close_miss_probability_cutoff(id(close_miss_threshold).state);
         id(mww).set_capture_upload_url(id(trainer_app_url).state);
     - micro_wake_word.start:
-    - micro_wake_word.enable_model: ${wake_word_name}
-    - micro_wake_word.disable_model: stop
     - lambda: id(voice_assistant_phase) = 1;
     - text_sensor.template.publish:
         id: connection_status_text
@@ -333,9 +331,6 @@ voice_assistant:
               state: "Voice error"
           - script.execute: show_voice_page
   on_start:
-    - micro_wake_word.stop:
-    - micro_wake_word.disable_model: ${wake_word_name}
-    - micro_wake_word.disable_model: stop
     - lambda: id(voice_assistant_phase) = 2;
     - text_sensor.template.publish:
         id: connection_status_text
@@ -391,19 +386,12 @@ voice_assistant:
               state: "Replying"
           - script.execute: show_voice_page
   on_tts_start:
-    - script.stop: activate_stop_word_once
-    - micro_wake_word.stop:
-    - delay: 100ms
     - lambda: id(voice_assistant_phase) = 5;
     - text_sensor.template.publish:
         id: connection_status_text
         state: "Replying"
     - script.execute: show_voice_page
   on_end:
-    - wait_until:
-        not:
-          voice_assistant.is_running:
-    - script.stop: activate_stop_word_once
     - wait_until:
         condition:
           - media_player.is_announcing:
@@ -418,15 +406,7 @@ voice_assistant:
             - not:
                 speaker.is_playing:
                   id: box_speaker
-        timeout: 90s
-    - wait_until:
-        condition:
-          not:
-            microphone.is_capturing:
-        timeout: 2s
-    - micro_wake_word.stop:
-    - micro_wake_word.disable_model: stop
-    - micro_wake_word.enable_model: ${wake_word_name}
+    - lambda: id(va).set_use_wake_word(false);
     - micro_wake_word.start:
     - lambda: id(voice_assistant_phase) = 1;
     - text_sensor.template.publish:
@@ -863,24 +843,6 @@ script:
                   lambda: return !id(event_visible);
                 then:
                   - lvgl.page.show: home_page
-
-  - id: activate_stop_word_once
-    mode: restart
-    then:
-      - wait_until:
-          condition:
-            media_player.is_announcing:
-              id: speaker_media_player
-          timeout: 5s
-      - delay: 1s
-      - micro_wake_word.enable_model: stop
-      - wait_until:
-          condition:
-            not:
-              media_player.is_announcing:
-                id: speaker_media_player
-          timeout: 90s
-      - micro_wake_word.disable_model: stop
 
   - id: fetch_tater_feed
     mode: single
