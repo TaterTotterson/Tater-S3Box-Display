@@ -148,7 +148,7 @@ online_image:
     id: event_snapshot_image
     format: JPEG
     type: RGB565
-    resize: 296x132
+    resize: 296x122
     update_interval: never
     request_headers:
       X-Tater-Token: "${tater_token}"
@@ -259,6 +259,10 @@ light:
 
 globals:
   - id: last_event_seq
+    type: int
+    restore_value: no
+    initial_value: "0"
+  - id: tater_http_failures
     type: int
     restore_value: no
     initial_value: "0"
@@ -1133,6 +1137,35 @@ script:
             time_format: "%a %b %d"
             time: local_time
 
+  - id: mark_tater_http_success
+    mode: restart
+    then:
+      - lambda: |-
+          id(tater_http_failures) = 0;
+      - if:
+          condition:
+            lambda: return id(voice_assistant_phase) <= 1 || id(voice_assistant_phase) >= 10;
+          then:
+            - text_sensor.template.publish:
+                id: connection_status_text
+                state: "Tater online"
+
+  - id: mark_tater_http_failure
+    mode: restart
+    then:
+      - lambda: |-
+          if (id(tater_http_failures) < 1000) {
+            id(tater_http_failures) += 1;
+          }
+          ESP_LOGW("tater.display", "Display HTTP miss %d/3; keeping last known screen data.", id(tater_http_failures));
+      - if:
+          condition:
+            lambda: return id(tater_http_failures) >= 3 && (id(voice_assistant_phase) <= 1 || id(voice_assistant_phase) >= 10);
+          then:
+            - text_sensor.template.publish:
+                id: connection_status_text
+                state: "Tater offline"
+
   - id: update_voice_visual
     mode: restart
     then:
@@ -1289,13 +1322,7 @@ script:
                   condition:
                     lambda: return response->status_code == 200;
                   then:
-                    - if:
-                        condition:
-                          lambda: return id(voice_assistant_phase) <= 1 || id(voice_assistant_phase) >= 10;
-                        then:
-                          - text_sensor.template.publish:
-                              id: connection_status_text
-                              state: "Tater online"
+                    - script.execute: mark_tater_http_success
                     - lambda: |-
                         json::parse_json(body, [](JsonObject root) -> bool {
                           JsonObject text = root["text"].as<JsonObject>();
@@ -1316,22 +1343,10 @@ script:
                           return true;
                         });
                   else:
-                    - if:
-                        condition:
-                          lambda: return id(voice_assistant_phase) <= 1 || id(voice_assistant_phase) >= 10;
-                        then:
-                          - text_sensor.template.publish:
-                              id: connection_status_text
-                              state: "Tater offline"
+                    - script.execute: mark_tater_http_failure
           on_error:
             then:
-              - if:
-                  condition:
-                    lambda: return id(voice_assistant_phase) <= 1 || id(voice_assistant_phase) >= 10;
-                  then:
-                    - text_sensor.template.publish:
-                        id: connection_status_text
-                        state: "Tater offline"
+              - script.execute: mark_tater_http_failure
 
   - id: fetch_tater_events
     mode: single
@@ -1370,6 +1385,7 @@ script:
                   condition:
                     lambda: return response->status_code == 200;
                   then:
+                    - script.execute: mark_tater_http_success
                     - lambda: |-
                         json::parse_json(body, [](JsonObject root) -> bool {
                           int last_seq = root["last_seq"] | id(last_event_seq);
@@ -1398,16 +1414,53 @@ script:
                           if (title == nullptr || title[0] == '\0') {
                             title = kind_text == "tool_call" ? "Tool Call" : "${tater_first_name}";
                           }
-                          if ((message == nullptr || message[0] == '\0') && description != nullptr) {
-                            message = description;
+                          std::string message_text = message == nullptr ? "" : std::string(message);
+                          std::string description_text = description == nullptr ? "" : std::string(description);
+                          if (message_text.empty() && !description_text.empty()) {
+                            message_text = description_text;
+                          }
+                          if (description_text == message_text) {
+                            description_text.clear();
                           }
 
                           id(event_title_text).publish_state(title);
-                          id(event_message_text).publish_state(message == nullptr ? "" : message);
-                          id(event_description_text).publish_state(description == nullptr ? "" : description);
+                          id(event_message_text).publish_state(message_text);
+                          id(event_description_text).publish_state(description_text);
                           id(event_priority_text).publish_state(priority == nullptr ? "normal" : priority);
 
                           std::string image_url_text = image_url == nullptr ? "" : std::string(image_url);
+                          auto set_image_if_empty = [&](const char *value) {
+                            if (!image_url_text.empty() || value == nullptr || value[0] == '\0') {
+                              return;
+                            }
+                            image_url_text = value;
+                          };
+                          set_image_if_empty(event["snapshot_url"] | "");
+                          set_image_if_empty(event["thumbnail_url"] | "");
+                          JsonObject meta = event["meta"].as<JsonObject>();
+                          if (!meta.isNull()) {
+                            set_image_if_empty(meta["image_url"] | "");
+                            set_image_if_empty(meta["snapshot_url"] | "");
+                            set_image_if_empty(meta["thumbnail_url"] | "");
+                          }
+                          JsonObject data = event["data"].as<JsonObject>();
+                          if (!data.isNull()) {
+                            set_image_if_empty(data["image_url"] | "");
+                            set_image_if_empty(data["snapshot_url"] | "");
+                            set_image_if_empty(data["thumbnail_url"] | "");
+                          }
+                          if (image_url_text.empty()) {
+                            const char *snapshot_id = event["snapshot_id"] | "";
+                            if ((snapshot_id == nullptr || snapshot_id[0] == '\0') && !data.isNull()) {
+                              snapshot_id = data["snapshot_id"] | "";
+                            }
+                            if ((snapshot_id == nullptr || snapshot_id[0] == '\0') && !meta.isNull()) {
+                              snapshot_id = meta["snapshot_id"] | "";
+                            }
+                            if (snapshot_id != nullptr && snapshot_id[0] != '\0') {
+                              image_url_text = std::string("/tater-ha/v1/display/snapshots/") + snapshot_id;
+                            }
+                          }
                           if (!image_url_text.empty()) {
                             auto normalize_base = []() -> std::string {
                               std::string base = "${tater_base_url}";
@@ -1473,6 +1526,11 @@ script:
                           id(event_kind_text).publish_state(kind);
                           return true;
                         });
+                  else:
+                    - script.execute: mark_tater_http_failure
+          on_error:
+            then:
+              - script.execute: mark_tater_http_failure
 
   - id: animate_tool_call
     mode: restart
@@ -2421,6 +2479,8 @@ lvgl:
             width: 296
             height: 180
             styles: panel_style
+            scrollbar_mode: "OFF"
+            scrollable: false
             widgets:
               - label:
                   id: event_title_label
@@ -2494,7 +2554,7 @@ lvgl:
             x: 12
             y: 42
             width: 296
-            height: 132
+            height: 122
             bg_color: 0x0D0E0F
             bg_opa: COVER
             border_color: 0x2A2C30
@@ -2502,19 +2562,21 @@ lvgl:
             radius: 8
             pad_all: 0
             clip_corner: true
+            scrollbar_mode: "OFF"
+            scrollable: false
             widgets:
               - image:
                   id: event_image_widget
                   x: 0
                   y: 0
                   width: 296
-                  height: 132
+                  height: 122
                   src: event_snapshot_image
                   hidden: true
               - label:
                   id: event_image_status_label
                   x: 0
-                  y: 54
+                  y: 49
                   width: 296
                   text: "Loading snapshot..."
                   text_align: CENTER
@@ -2525,7 +2587,7 @@ lvgl:
         - label:
             id: event_image_title_label
             x: 12
-            y: 181
+            y: 170
             width: 296
             text: "Camera Event"
             long_mode: DOT
@@ -2534,23 +2596,24 @@ lvgl:
         - label:
             id: event_image_message_label
             x: 12
-            y: 204
+            y: 194
             width: 296
-            height: 18
+            height: 42
             text: ""
-            long_mode: DOT
-            text_font: tater_font_14
+            long_mode: WRAP
+            text_font: tater_font_18
             text_color: 0xF1EEE8
         - label:
             id: event_image_description_label
             x: 12
-            y: 222
+            y: 224
             width: 296
             height: 16
             text: ""
             long_mode: DOT
             text_font: tater_font_14
             text_color: 0xA8A096
+            hidden: true
 
     - id: tool_page
       styles: screen_style
