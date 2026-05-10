@@ -8,6 +8,7 @@ The screen is built with LVGL and uses the Tater color language: near-black surf
 
 - A Tater home dashboard with time, date, connection status, indoor/outdoor temperature, humidity, wind, rain, and lightning slots.
 - A transient notification page for display events pushed through Tater.
+- A camera snapshot notification page that downloads the event image and shows it with the description text.
 - A dedicated tool-call page for live voice tool progress, using the mirrored-dot animation language from the Tater voice firmware.
 
 ## Tater API
@@ -60,5 +61,6 @@ sensor_lightning_strikes: sensor.weather_lightning_strikes
 
 - The display uses LVGL with ESPHome's `mipi_spi` S3BOX display driver, `auto_clear_enabled: false`, and `update_interval: never`.
 - Tater polling waits for Wi-Fi and uses single-run scripts so a missing network or offline Tater API cannot overlap HTTP requests during boot.
+- The firmware exposes a `Refresh Display Events` ESPHome button so Tater can nudge connected displays to fetch new events immediately while the normal poll remains as a fallback.
 - Fonts use ESPHome's Google Fonts support so the Tater firmware builder can compile the fetched YAML without extra local assets.
-- Camera snapshot rendering is the next layer to add. The Tater event API already carries image URLs; the firmware currently renders the event text first.
+- Camera snapshot display events use ESPHome `online_image`; Tater-hosted Awareness snapshots are served as JPEGs and fetched with the display API token when configured.

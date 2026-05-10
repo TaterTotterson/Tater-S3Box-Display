@@ -98,6 +98,15 @@ logger:
 api:
   reboot_timeout: 0s
 
+button:
+  - platform: template
+    id: refresh_display_events_button
+    name: Refresh Display Events
+    entity_category: diagnostic
+    on_press:
+      then:
+        - script.execute: fetch_tater_events
+
 ota:
   - platform: esphome
 
@@ -133,6 +142,27 @@ http_request:
   verify_ssl: false
   buffer_size_rx: 1024
   buffer_size_tx: 1024
+
+online_image:
+  - url: "http://127.0.0.1/"
+    id: event_snapshot_image
+    format: JPEG
+    type: RGB565
+    resize: 296x132
+    update_interval: never
+    request_headers:
+      X-Tater-Token: "${tater_token}"
+    on_download_finished:
+      then:
+        - lvgl.widget.show: event_image_widget
+        - lvgl.widget.hide: event_image_status_label
+    on_error:
+      then:
+        - lvgl.widget.hide: event_image_widget
+        - lvgl.label.update:
+            id: event_image_status_label
+            text: "Snapshot unavailable"
+        - lvgl.widget.show: event_image_status_label
 
 i2c:
   - id: i2c_adc_dac
@@ -652,7 +682,13 @@ text_sensor:
             then:
               - lvgl.page.show: tool_page
             else:
-              - lvgl.page.show: event_page
+              - if:
+                  condition:
+                    lambda: return !id(event_image_url_text).state.empty();
+                  then:
+                    - lvgl.page.show: event_image_page
+                  else:
+                    - lvgl.page.show: event_page
 
   - platform: template
     id: event_title_text
@@ -662,6 +698,9 @@ text_sensor:
         - lvgl.label.update:
             id: event_title_label
             text: !lambda return x;
+        - lvgl.label.update:
+            id: event_image_title_label
+            text: !lambda return x;
 
   - platform: template
     id: event_message_text
@@ -670,6 +709,9 @@ text_sensor:
       then:
         - lvgl.label.update:
             id: event_message_label
+            text: !lambda return x;
+        - lvgl.label.update:
+            id: event_image_message_label
             text: !lambda return x;
         - lvgl.label.update:
             id: tool_message_label
@@ -683,6 +725,9 @@ text_sensor:
         - lvgl.label.update:
             id: event_description_label
             text: !lambda return x;
+        - lvgl.label.update:
+            id: event_image_description_label
+            text: !lambda return x;
 
   - platform: template
     id: event_priority_text
@@ -692,6 +737,32 @@ text_sensor:
         - lvgl.label.update:
             id: event_priority_label
             text: !lambda return x;
+        - lvgl.label.update:
+            id: event_image_priority_label
+            text: !lambda return x;
+
+  - platform: template
+    id: event_image_url_text
+    internal: true
+    on_value:
+      then:
+        - if:
+            condition:
+              lambda: return !x.empty();
+            then:
+              - lvgl.widget.hide: event_image_widget
+              - lvgl.label.update:
+                  id: event_image_status_label
+                  text: "Loading snapshot..."
+              - lvgl.widget.show: event_image_status_label
+              - online_image.set_url:
+                  id: event_snapshot_image
+                  url: !lambda return x;
+                  update: true
+            else:
+              - lvgl.widget.hide: event_image_widget
+              - lvgl.widget.hide: event_image_status_label
+              - online_image.release: event_snapshot_image
 
   - platform: template
     id: tool_name_text
@@ -981,6 +1052,7 @@ script:
                           const char *message = event["message"] | "";
                           const char *description = event["description"] | "";
                           const char *priority = event["priority"] | "normal";
+                          const char *image_url = event["image_url"] | "";
                           const char *tool = event["tool"] | "";
                           int step_index = event["step_index"] | 0;
                           int step_total = event["step_total"] | 0;
@@ -998,6 +1070,50 @@ script:
                           id(event_message_text).publish_state(message == nullptr ? "" : message);
                           id(event_description_text).publish_state(description == nullptr ? "" : description);
                           id(event_priority_text).publish_state(priority == nullptr ? "normal" : priority);
+
+                          std::string image_url_text = image_url == nullptr ? "" : std::string(image_url);
+                          if (!image_url_text.empty()) {
+                            auto normalize_base = []() -> std::string {
+                              std::string base = "${tater_base_url}";
+                              if (base.compare(0, 5, "http:") == 0 && base.compare(0, 7, "http://") != 0) {
+                                std::string rest = base.substr(5);
+                                while (!rest.empty() && rest.front() == '/') {
+                                  rest.erase(0, 1);
+                                }
+                                base = "http://" + rest;
+                              } else if (base.compare(0, 6, "https:") == 0 && base.compare(0, 8, "https://") != 0) {
+                                std::string rest = base.substr(6);
+                                while (!rest.empty() && rest.front() == '/') {
+                                  rest.erase(0, 1);
+                                }
+                                base = "https://" + rest;
+                              } else if (base.compare(0, 7, "http://") != 0 && base.compare(0, 8, "https://") != 0) {
+                                base = "http://" + base;
+                              }
+                              while (!base.empty() && base.back() == '/') {
+                                base.pop_back();
+                              }
+                              return base;
+                            };
+                            if (image_url_text.compare(0, 5, "http:") == 0 && image_url_text.compare(0, 7, "http://") != 0) {
+                              std::string rest = image_url_text.substr(5);
+                              while (!rest.empty() && rest.front() == '/') {
+                                rest.erase(0, 1);
+                              }
+                              image_url_text = "http://" + rest;
+                            } else if (image_url_text.compare(0, 6, "https:") == 0 && image_url_text.compare(0, 8, "https://") != 0) {
+                              std::string rest = image_url_text.substr(6);
+                              while (!rest.empty() && rest.front() == '/') {
+                                rest.erase(0, 1);
+                              }
+                              image_url_text = "https://" + rest;
+                            } else if (image_url_text.front() == '/') {
+                              image_url_text = normalize_base() + image_url_text;
+                            } else if (image_url_text.compare(0, 7, "http://") != 0 && image_url_text.compare(0, 8, "https://") != 0) {
+                              image_url_text = normalize_base() + "/" + image_url_text;
+                            }
+                          }
+                          id(event_image_url_text).publish_state(image_url_text);
                           id(tool_name_text).publish_state(
                             tool != nullptr && tool[0] != '\0' ? tool : "${tater_first_name} is working"
                           );
@@ -1461,6 +1577,100 @@ lvgl:
                   long_mode: WRAP
                   text_font: tater_font_14
                   text_color: 0xA8A096
+
+    - id: event_image_page
+      styles: screen_style
+      widgets:
+        - obj:
+            x: 0
+            y: 0
+            width: 320
+            height: 34
+            bg_color: 0x151617
+            bg_opa: COVER
+            border_width: 0
+            radius: 0
+            pad_all: 0
+            widgets:
+              - label:
+                  x: 10
+                  y: 8
+                  width: 86
+                  text: "${tater_first_name}"
+                  long_mode: DOT
+                  text_font: tater_font_18
+                  text_color: 0xF08345
+              - label:
+                  id: event_image_priority_label
+                  x: 218
+                  y: 10
+                  width: 92
+                  text: "normal"
+                  text_align: RIGHT
+                  long_mode: DOT
+                  text_font: tater_font_14
+                  text_color: 0xA8A096
+        - obj:
+            x: 12
+            y: 42
+            width: 296
+            height: 132
+            bg_color: 0x0D0E0F
+            bg_opa: COVER
+            border_color: 0x2A2C30
+            border_width: 1
+            radius: 8
+            pad_all: 0
+            clip_corner: true
+            widgets:
+              - image:
+                  id: event_image_widget
+                  x: 0
+                  y: 0
+                  width: 296
+                  height: 132
+                  src: event_snapshot_image
+                  hidden: true
+              - label:
+                  id: event_image_status_label
+                  x: 0
+                  y: 54
+                  width: 296
+                  text: "Loading snapshot..."
+                  text_align: CENTER
+                  long_mode: DOT
+                  text_font: tater_font_14
+                  text_color: 0xA8A096
+                  hidden: true
+        - label:
+            id: event_image_title_label
+            x: 12
+            y: 181
+            width: 296
+            text: "Camera Event"
+            long_mode: DOT
+            text_font: tater_font_18
+            text_color: 0xF08345
+        - label:
+            id: event_image_message_label
+            x: 12
+            y: 204
+            width: 296
+            height: 18
+            text: ""
+            long_mode: DOT
+            text_font: tater_font_14
+            text_color: 0xF1EEE8
+        - label:
+            id: event_image_description_label
+            x: 12
+            y: 222
+            width: 296
+            height: 16
+            text: ""
+            long_mode: DOT
+            text_font: tater_font_14
+            text_color: 0xA8A096
 
     - id: tool_page
       styles: screen_style
