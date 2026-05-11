@@ -1080,7 +1080,7 @@ interval:
             - script.execute: show_home_if_no_event
       - if:
           condition:
-            lambda: return id(event_visible) && id(event_kind_text).state == "tool_call";
+            lambda: return id(event_visible) && id(event_kind_text)->state == "tool_call";
           then:
             - script.execute: animate_tool_call
 
@@ -1148,8 +1148,8 @@ display:
         return value;
       };
 
-      auto state_text = [&](auto &sensor, const char *fallback) -> std::string {
-        std::string value = sensor.state.c_str();
+      auto state_text = [&](auto *sensor, const char *fallback) -> std::string {
+        std::string value = sensor->state.c_str();
         return value.empty() ? std::string(fallback) : value;
       };
 
