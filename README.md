@@ -2,7 +2,7 @@
 
 ESPHome firmware for the ESP32-S3-BOX-3 display that talks to Tater directly instead of binding the screen to Home Assistant widgets.
 
-The screen is built with LVGL and uses the Tater color language: near-black surfaces, warm off-white text, muted secondary text, and burnt orange accents.
+The screen uses ESPHome's native `mipi_spi` display rendering and the Tater color language: near-black surfaces, warm off-white text, muted secondary text, and burnt orange accents.
 
 ## What It Shows
 
@@ -10,6 +10,7 @@ The screen is built with LVGL and uses the Tater color language: near-black surf
 - A transient notification page for display events pushed through Tater.
 - A camera snapshot notification page that downloads the event image and shows it with the description text.
 - A dedicated tool-call page for live voice tool progress, using the mirrored-dot animation language from the Tater voice firmware.
+- ESP32-S3-BOX-3 microphone, speaker, and wake-word voice pipeline support.
 
 ## Tater API
 
@@ -59,7 +60,8 @@ sensor_lightning_strikes: sensor.weather_lightning_strikes
 
 ## Notes
 
-- The display uses LVGL with ESPHome's `mipi_spi` S3BOX display driver, `auto_clear_enabled: false`, and `update_interval: never`.
+- The display uses ESPHome's native `mipi_spi` S3BOX display driver, `auto_clear_enabled: false`, and `update_interval: never`.
+- The Box-3 speaker path includes the ES8311 DAC, I2S speaker, speaker media player, and GPIO46 speaker-enable pin from the upstream Box-3 voice assistant example.
 - Tater polling waits for Wi-Fi and uses single-run scripts so a missing network or offline Tater API cannot overlap HTTP requests during boot.
 - The firmware exposes a `Refresh Display Events` ESPHome button so Tater can nudge connected displays to fetch new events immediately while the normal poll remains as a fallback.
 - Fonts use ESPHome's Google Fonts support so the Tater firmware builder can compile the fetched YAML without extra local assets.

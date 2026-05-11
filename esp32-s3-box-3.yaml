@@ -92,8 +92,6 @@ wifi:
 logger:
   level: INFO
   hardware_uart: USB_SERIAL_JTAG
-  logs:
-    lvgl: WARN
 
 api:
   reboot_timeout: 0s
@@ -154,15 +152,16 @@ online_image:
       X-Tater-Token: "${tater_token}"
     on_download_finished:
       then:
-        - lvgl.widget.show: event_image_widget
-        - lvgl.widget.hide: event_image_status_label
+        - lambda: |-
+            id(event_image_ready) = true;
+            id(event_image_failed) = false;
+        - script.execute: draw_display
     on_error:
       then:
-        - lvgl.widget.hide: event_image_widget
-        - lvgl.label.update:
-            id: event_image_status_label
-            text: "Snapshot unavailable"
-        - lvgl.widget.show: event_image_status_label
+        - lambda: |-
+            id(event_image_ready) = false;
+            id(event_image_failed) = true;
+        - script.execute: draw_display
 
 i2c:
   - id: i2c_adc_dac
@@ -274,6 +273,14 @@ globals:
     type: uint32_t
     restore_value: no
     initial_value: "0"
+  - id: event_image_ready
+    type: bool
+    restore_value: no
+    initial_value: "false"
+  - id: event_image_failed
+    type: bool
+    restore_value: no
+    initial_value: "false"
   - id: tool_animation_frame
     type: int
     restore_value: no
@@ -449,6 +456,16 @@ voice_assistant:
     - script.execute: show_home_if_no_event
 
 switch:
+  - platform: gpio
+    id: speaker_enable_switch
+    name: Speaker Enable
+    pin:
+      number: GPIO46
+      ignore_strapping_warning: true
+    restore_mode: RESTORE_DEFAULT_ON
+    entity_category: config
+    disabled_by_default: true
+
   - platform: template
     id: master_mute_switch
     name: Microphone Mute
@@ -605,145 +622,91 @@ text_sensor:
     internal: true
     on_value:
       then:
-        - lvgl.label.update:
-            id: status_label
-            text: !lambda return x;
-        - lvgl.label.update:
-            id: voice_status_label
-            text: !lambda return x;
+        - script.execute: draw_display
 
   - platform: template
     id: temp_out_text
     internal: true
     on_value:
       then:
-        - lvgl.label.update:
-            id: temp_out_value
-            text: !lambda return x;
+        - script.execute: draw_display
 
   - platform: template
     id: temp_in_text
     internal: true
     on_value:
       then:
-        - lvgl.label.update:
-            id: temp_in_value
-            text: !lambda return x;
+        - script.execute: draw_display
 
   - platform: template
     id: humidity_out_text
     internal: true
     on_value:
       then:
-        - lvgl.label.update:
-            id: humidity_out_value
-            text: !lambda return x;
+        - script.execute: draw_display
 
   - platform: template
     id: humidity_in_text
     internal: true
     on_value:
       then:
-        - lvgl.label.update:
-            id: humidity_in_value
-            text: !lambda return x;
+        - script.execute: draw_display
 
   - platform: template
     id: wind_text
     internal: true
     on_value:
       then:
-        - lvgl.label.update:
-            id: wind_value
-            text: !lambda return x;
+        - script.execute: draw_display
 
   - platform: template
     id: rain_text
     internal: true
     on_value:
       then:
-        - lvgl.label.update:
-            id: rain_value
-            text: !lambda return x;
+        - script.execute: draw_display
 
   - platform: template
     id: lightning_text
     internal: true
     on_value:
       then:
-        - lvgl.label.update:
-            id: lightning_value
-            text: !lambda return x;
+        - script.execute: draw_display
 
   - platform: template
     id: event_kind_text
     internal: true
     on_value:
       then:
-        - if:
-            condition:
-              lambda: return x == "tool_call";
-            then:
-              - lvgl.page.show: tool_page
-            else:
-              - if:
-                  condition:
-                    lambda: return !id(event_image_url_text).state.empty();
-                  then:
-                    - lvgl.page.show: event_image_page
-                  else:
-                    - lvgl.page.show: event_page
+        - script.execute: draw_display
 
   - platform: template
     id: event_title_text
     internal: true
     on_value:
       then:
-        - lvgl.label.update:
-            id: event_title_label
-            text: !lambda return x;
-        - lvgl.label.update:
-            id: event_image_title_label
-            text: !lambda return x;
+        - script.execute: draw_display
 
   - platform: template
     id: event_message_text
     internal: true
     on_value:
       then:
-        - lvgl.label.update:
-            id: event_message_label
-            text: !lambda return x;
-        - lvgl.label.update:
-            id: event_image_message_label
-            text: !lambda return x;
-        - lvgl.label.update:
-            id: tool_message_label
-            text: !lambda return x;
+        - script.execute: draw_display
 
   - platform: template
     id: event_description_text
     internal: true
     on_value:
       then:
-        - lvgl.label.update:
-            id: event_description_label
-            text: !lambda return x;
-        - lvgl.label.update:
-            id: event_image_description_label
-            text: !lambda return x;
+        - script.execute: draw_display
 
   - platform: template
     id: event_priority_text
     internal: true
     on_value:
       then:
-        - lvgl.label.update:
-            id: event_priority_label
-            text: !lambda return x;
-        - lvgl.label.update:
-            id: event_image_priority_label
-            text: !lambda return x;
+        - script.execute: draw_display
 
   - platform: template
     id: event_image_url_text
@@ -754,52 +717,44 @@ text_sensor:
             condition:
               lambda: return !x.empty();
             then:
-              - lvgl.widget.hide: event_image_widget
-              - lvgl.label.update:
-                  id: event_image_status_label
-                  text: "Loading snapshot..."
-              - lvgl.widget.show: event_image_status_label
+              - lambda: |-
+                  id(event_image_ready) = false;
+                  id(event_image_failed) = false;
               - online_image.set_url:
                   id: event_snapshot_image
                   url: !lambda return x;
                   update: true
             else:
-              - lvgl.widget.hide: event_image_widget
-              - lvgl.widget.hide: event_image_status_label
+              - lambda: |-
+                  id(event_image_ready) = false;
+                  id(event_image_failed) = false;
               - online_image.release: event_snapshot_image
+        - script.execute: draw_display
 
   - platform: template
     id: tool_name_text
     internal: true
     on_value:
       then:
-        - lvgl.label.update:
-            id: tool_name_label
-            text: !lambda return x;
+        - script.execute: draw_display
 
   - platform: template
     id: tool_step_text
     internal: true
     on_value:
       then:
-        - lvgl.label.update:
-            id: tool_step_label
-            text: !lambda return x;
+        - script.execute: draw_display
 
 script:
   - id: refresh_clock
     mode: restart
     then:
-      - lvgl.label.update:
-          id: clock_label
-          text:
-            time_format: "%I:%M"
-            time: local_time
-      - lvgl.label.update:
-          id: date_label
-          text:
-            time_format: "%a %b %d"
-            time: local_time
+      - component.update: s3_box_lcd
+
+  - id: draw_display
+    mode: restart
+    then:
+      - component.update: s3_box_lcd
 
   - id: mark_tater_http_success
     mode: restart
@@ -830,99 +785,6 @@ script:
                 id: connection_status_text
                 state: "Tater offline"
 
-  - id: update_voice_visual
-    mode: restart
-    then:
-      - lvgl.label.update:
-          id: voice_title_label
-          text: !lambda |-
-            switch (id(voice_assistant_phase)) {
-              case 3:
-                return "Hearing you";
-              case 4:
-                return "Thinking";
-              case 5:
-                return "Replying";
-              case 11:
-                return "Voice error";
-              case 2:
-              default:
-                return "Listening";
-            }
-      - lvgl.label.update:
-          id: voice_subtitle_label
-          text: !lambda |-
-            switch (id(voice_assistant_phase)) {
-              case 3:
-                return "Keep talking.";
-              case 4:
-                return "Working through it.";
-              case 5:
-                return "Sending the answer.";
-              case 11:
-                return "Voice needs attention.";
-              case 2:
-              default:
-                return "Say it, I'm listening.";
-            }
-      - lvgl.label.update:
-          id: voice_motion_label
-          text: !lambda |-
-            static const char * const listening[] = {
-              "o        .        o",
-              "  o      .      o  ",
-              "    o    .    o    ",
-              "      o  .  o      ",
-              "        o.o        ",
-              "      o  .  o      "
-            };
-            static const char * const hearing[] = {
-              "|  ||  |||  ||  |",
-              "|| ||| |||| ||| ||",
-              "||| ||||||||| |||",
-              "|| ||| |||| ||| ||",
-              "|  ||  |||  ||  |",
-              "   |   |||   |   "
-            };
-            static const char * const thinking[] = {
-              "o  --------    ",
-              "  o  ------    ",
-              "    o  ----    ",
-              "      o  --    ",
-              "        o      ",
-              "      --  o    "
-            };
-            static const char * const replying[] = {
-              "--__--__--__--",
-              "__--__--__--__",
-              "-_--_--_--_--",
-              "_--_--_--_--_",
-              "--__--__--__--",
-              "__--__--__--__"
-            };
-            static const char * const error[] = {
-              "x      x      x",
-              "  x    x    x  ",
-              "    x  x  x    ",
-              "      xxx      ",
-              "    x  x  x    ",
-              "  x    x    x  "
-            };
-            int frame = id(voice_animation_frame) % 6;
-            switch (id(voice_assistant_phase)) {
-              case 3:
-                return hearing[frame];
-              case 4:
-                return thinking[frame];
-              case 5:
-                return replying[frame];
-              case 11:
-                return error[frame];
-              case 2:
-              default:
-                return listening[frame];
-            }
-
   - id: show_voice_page
     mode: restart
     then:
@@ -930,23 +792,12 @@ script:
           condition:
             lambda: return !id(event_visible);
           then:
-            - script.execute: update_voice_visual
-            - lvgl.page.show: voice_page
+            - component.update: s3_box_lcd
 
   - id: show_home_if_no_event
     mode: restart
     then:
-      - if:
-          condition:
-            lambda: return !id(event_visible) && ((id(voice_assistant_phase) >= 2 && id(voice_assistant_phase) <= 5) || id(voice_assistant_phase) == 11);
-          then:
-            - script.execute: show_voice_page
-          else:
-            - if:
-                condition:
-                  lambda: return !id(event_visible);
-                then:
-                  - lvgl.page.show: home_page
+      - component.update: s3_box_lcd
 
   - id: fetch_tater_feed
     mode: single
@@ -1201,25 +1052,14 @@ script:
     then:
       - lambda: |-
           id(tool_animation_frame) = (id(tool_animation_frame) + 1) % 6;
-      - lvgl.label.update:
-          id: tool_motion_label
-          text: !lambda |-
-            static const char * const frames[] = {
-              "o                o",
-              "  o            o  ",
-              "    o        o    ",
-              "      o    o      ",
-              "        oo        ",
-              "      o    o      "
-            };
-            return frames[id(tool_animation_frame)];
+      - component.update: s3_box_lcd
 
   - id: animate_voice_pipeline
     mode: restart
     then:
       - lambda: |-
           id(voice_animation_frame) = (id(voice_animation_frame) + 1) % 6;
-      - script.execute: update_voice_visual
+      - component.update: s3_box_lcd
 
 interval:
   - interval: 500ms
@@ -1263,6 +1103,27 @@ interval:
           then:
             - script.execute: fetch_tater_events
 
+color:
+  - id: tater_bg
+    hex: "111213"
+  - id: tater_top
+    hex: "151617"
+  - id: tater_panel
+    hex: "1A1B1D"
+  - id: tater_border
+    hex: "2A2C30"
+  - id: tater_rail
+    hex: "2A2C30"
+  - id: tater_orange
+    hex: "F08345"
+  - id: tater_text
+    hex: "F1EEE8"
+  - id: tater_muted
+    hex: "A8A096"
+  - id: tater_black
+    hex: "0D0E0F"
+
+
 display:
   - platform: mipi_spi
     id: s3_box_lcd
@@ -1276,551 +1137,198 @@ display:
     invert_colors: false
     auto_clear_enabled: false
     update_interval: never
+    lambda: |-
+      auto trunc = [](std::string value, size_t limit) -> std::string {
+        while (!value.empty() && (value.front() == ' ' || value.front() == '\n' || value.front() == '\r' || value.front() == '\t')) {
+          value.erase(0, 1);
+        }
+        while (!value.empty() && (value.back() == ' ' || value.back() == '\n' || value.back() == '\r' || value.back() == '\t')) {
+          value.pop_back();
+        }
+        if (limit > 3 && value.length() > limit) {
+          return value.substr(0, limit - 3) + "...";
+        }
+        return value;
+      };
 
-lvgl:
-  displays:
-    - s3_box_lcd
-  buffer_size: 25%
-  log_level: WARN
-  style_definitions:
-    - id: screen_style
-      bg_color: 0x111213
-      bg_opa: COVER
-      border_width: 0
-      pad_all: 0
-    - id: panel_style
-      bg_color: 0x1A1B1D
-      bg_opa: COVER
-      border_color: 0x2A2C30
-      border_width: 1
-      radius: 8
-      pad_all: 8
-    - id: rail_style
-      bg_color: 0x2A2C30
-      bg_opa: COVER
-      border_width: 0
-      radius: 2
-      pad_all: 0
-  pages:
-    - id: home_page
-      styles: screen_style
-      widgets:
-        - obj:
-            x: 0
-            y: 0
-            width: 320
-            height: 34
-            bg_color: 0x151617
-            bg_opa: COVER
-            border_width: 0
-            radius: 0
-            pad_all: 0
-            widgets:
-              - label:
-                  x: 10
-                  y: 8
-                  width: 86
-                  text: "${tater_first_name}"
-                  long_mode: DOT
-                  text_font: tater_font_18
-                  text_color: 0xF08345
-              - label:
-                  id: status_label
-                  x: 100
-                  y: 10
-                  width: 210
-                  text: "starting"
-                  text_align: RIGHT
-                  long_mode: DOT
-                  text_font: tater_font_14
-                  text_color: 0xA8A096
-        - label:
-            id: date_label
-            x: 0
-            y: 44
-            width: 320
-            text: "--- --"
-            text_align: CENTER
-            text_font: tater_font_18
-            text_color: 0xA8A096
-        - label:
-            id: clock_label
-            x: 0
-            y: 62
-            width: 320
-            text: "--:--"
-            text_align: CENTER
-            text_font: tater_font_56
-            text_color: 0xF1EEE8
-        - obj:
-            x: 12
-            y: 128
-            width: 142
-            height: 62
-            styles: panel_style
-            scrollbar_mode: "OFF"
-            scrollable: false
-            widgets:
-              - label:
-                  x: 0
-                  y: 0
-                  width: 126
-                  text: "Inside"
-                  text_font: tater_font_14
-                  text_color: 0xA8A096
-              - label:
-                  id: temp_in_value
-                  x: 0
-                  y: 18
-                  width: 70
-                  text: "--"
-                  text_font: tater_font_24
-                  text_color: 0xF08345
-              - label:
-                  id: humidity_in_value
-                  x: 74
-                  y: 23
-                  width: 52
-                  text: "--"
-                  text_align: RIGHT
-                  text_font: tater_font_18
-                  text_color: 0xF1EEE8
-        - obj:
-            x: 166
-            y: 128
-            width: 142
-            height: 62
-            styles: panel_style
-            scrollbar_mode: "OFF"
-            scrollable: false
-            widgets:
-              - label:
-                  x: 0
-                  y: 0
-                  width: 126
-                  text: "Outside"
-                  text_font: tater_font_14
-                  text_color: 0xA8A096
-              - label:
-                  id: temp_out_value
-                  x: 0
-                  y: 18
-                  width: 70
-                  text: "--"
-                  text_font: tater_font_24
-                  text_color: 0xF08345
-              - label:
-                  id: humidity_out_value
-                  x: 74
-                  y: 23
-                  width: 52
-                  text: "--"
-                  text_align: RIGHT
-                  text_font: tater_font_18
-                  text_color: 0xF1EEE8
-        - obj:
-            x: 12
-            y: 202
-            width: 90
-            height: 28
-            styles: panel_style
-            pad_all: 6
-            scrollbar_mode: "OFF"
-            scrollable: false
-            widgets:
-              - label:
-                  x: 0
-                  y: 0
-                  text: "Wind"
-                  text_font: tater_font_14
-                  text_color: 0xA8A096
-              - label:
-                  id: wind_value
-                  x: 40
-                  y: 0
-                  width: 34
-                  text: "--"
-                  text_align: RIGHT
-                  text_font: tater_font_14
-                  text_color: 0xF1EEE8
-        - obj:
-            x: 114
-            y: 202
-            width: 90
-            height: 28
-            styles: panel_style
-            pad_all: 6
-            scrollbar_mode: "OFF"
-            scrollable: false
-            widgets:
-              - label:
-                  x: 0
-                  y: 0
-                  text: "Rain"
-                  text_font: tater_font_14
-                  text_color: 0xA8A096
-              - label:
-                  id: rain_value
-                  x: 40
-                  y: 0
-                  width: 34
-                  text: "--"
-                  text_align: RIGHT
-                  text_font: tater_font_14
-                  text_color: 0xF1EEE8
-        - obj:
-            x: 216
-            y: 202
-            width: 92
-            height: 28
-            styles: panel_style
-            pad_all: 6
-            scrollbar_mode: "OFF"
-            scrollable: false
-            widgets:
-              - label:
-                  x: 0
-                  y: 0
-                  text: "Storm"
-                  text_font: tater_font_14
-                  text_color: 0xA8A096
-              - label:
-                  id: lightning_value
-                  x: 48
-                  y: 0
-                  width: 28
-                  text: "--"
-                  text_align: RIGHT
-                  text_font: tater_font_14
-                  text_color: 0xF1EEE8
+      auto state_text = [&](auto &sensor, const char *fallback) -> std::string {
+        std::string value = sensor.state.c_str();
+        return value.empty() ? std::string(fallback) : value;
+      };
 
-    - id: voice_page
-      styles: screen_style
-      widgets:
-        - obj:
-            x: 0
-            y: 0
-            width: 320
-            height: 34
-            bg_color: 0x151617
-            bg_opa: COVER
-            border_width: 0
-            radius: 0
-            pad_all: 0
-            widgets:
-              - label:
-                  x: 10
-                  y: 8
-                  width: 86
-                  text: "${tater_first_name}"
-                  long_mode: DOT
-                  text_font: tater_font_18
-                  text_color: 0xF08345
-              - label:
-                  id: voice_status_label
-                  x: 100
-                  y: 10
-                  width: 210
-                  text: "Voice active"
-                  text_align: RIGHT
-                  long_mode: DOT
-                  text_font: tater_font_14
-                  text_color: 0xA8A096
-        - label:
-            id: voice_title_label
-            x: 0
-            y: 54
-            width: 320
-            text: "Listening"
-            text_align: CENTER
-            long_mode: DOT
-            text_font: tater_font_36
-            text_color: 0xF08345
-        - obj:
-            x: 58
-            y: 108
-            width: 204
-            height: 4
-            styles: rail_style
-        - label:
-            id: voice_motion_label
-            x: 20
-            y: 88
-            width: 280
-            text: "o        .        o"
-            text_align: CENTER
-            long_mode: DOT
-            text_font: tater_font_24
-            text_color: 0xF08345
-        - obj:
-            x: 82
-            y: 124
-            width: 156
-            height: 2
-            bg_color: 0xF08345
-            bg_opa: COVER
-            border_width: 0
-            radius: 1
-            pad_all: 0
-        - label:
-            id: voice_subtitle_label
-            x: 24
-            y: 148
-            width: 272
-            height: 46
-            text: "Say it, I'm listening."
-            text_align: CENTER
-            long_mode: WRAP
-            text_font: tater_font_18
-            text_color: 0xF1EEE8
+      auto draw_header = [&](std::string right) {
+        it.filled_rectangle(0, 0, 320, 34, id(tater_top));
+        std::string name = trunc("${tater_first_name}", 12);
+        it.print(10, 8, id(tater_font_18), id(tater_orange), name.c_str());
+        right = trunc(right.empty() ? "starting" : right, 25);
+        it.print(310, 10, id(tater_font_14), id(tater_muted), TextAlign::TOP_RIGHT, right.c_str());
+      };
 
-    - id: event_page
-      styles: screen_style
-      widgets:
-        - obj:
-            x: 0
-            y: 0
-            width: 320
-            height: 34
-            bg_color: 0x151617
-            bg_opa: COVER
-            border_width: 0
-            radius: 0
-            pad_all: 0
-            widgets:
-              - label:
-                  x: 10
-                  y: 8
-                  width: 86
-                  text: "${tater_first_name}"
-                  long_mode: DOT
-                  text_font: tater_font_18
-                  text_color: 0xF08345
-              - label:
-                  id: event_priority_label
-                  x: 218
-                  y: 10
-                  width: 92
-                  text: "normal"
-                  text_align: RIGHT
-                  long_mode: DOT
-                  text_font: tater_font_14
-                  text_color: 0xA8A096
-        - obj:
-            x: 12
-            y: 48
-            width: 296
-            height: 180
-            styles: panel_style
-            scrollbar_mode: "OFF"
-            scrollable: false
-            widgets:
-              - label:
-                  id: event_title_label
-                  x: 0
-                  y: 0
-                  width: 280
-                  text: "Notification"
-                  long_mode: DOT
-                  text_font: tater_font_24
-                  text_color: 0xF08345
-              - obj:
-                  x: 0
-                  y: 42
-                  width: 280
-                  height: 3
-                  styles: rail_style
-              - label:
-                  id: event_message_label
-                  x: 0
-                  y: 58
-                  width: 280
-                  height: 52
-                  text: ""
-                  long_mode: WRAP
-                  text_font: tater_font_18
-                  text_color: 0xF1EEE8
-              - label:
-                  id: event_description_label
-                  x: 0
-                  y: 118
-                  width: 280
-                  height: 44
-                  text: ""
-                  long_mode: WRAP
-                  text_font: tater_font_14
-                  text_color: 0xA8A096
+      auto panel = [&](int x, int y, int w, int h) {
+        it.filled_rectangle(x, y, w, h, id(tater_panel));
+        it.rectangle(x, y, w, h, id(tater_border));
+      };
 
-    - id: event_image_page
-      styles: screen_style
-      widgets:
-        - obj:
-            x: 0
-            y: 0
-            width: 320
-            height: 34
-            bg_color: 0x151617
-            bg_opa: COVER
-            border_width: 0
-            radius: 0
-            pad_all: 0
-            widgets:
-              - label:
-                  x: 10
-                  y: 8
-                  width: 86
-                  text: "${tater_first_name}"
-                  long_mode: DOT
-                  text_font: tater_font_18
-                  text_color: 0xF08345
-              - label:
-                  id: event_image_priority_label
-                  x: 218
-                  y: 10
-                  width: 92
-                  text: "normal"
-                  text_align: RIGHT
-                  long_mode: DOT
-                  text_font: tater_font_14
-                  text_color: 0xA8A096
-        - obj:
-            x: 12
-            y: 42
-            width: 296
-            height: 122
-            bg_color: 0x0D0E0F
-            bg_opa: COVER
-            border_color: 0x2A2C30
-            border_width: 1
-            radius: 8
-            pad_all: 0
-            clip_corner: true
-            scrollbar_mode: "OFF"
-            scrollable: false
-            widgets:
-              - image:
-                  id: event_image_widget
-                  x: 0
-                  y: 0
-                  width: 296
-                  height: 122
-                  src: event_snapshot_image
-                  hidden: true
-              - label:
-                  id: event_image_status_label
-                  x: 0
-                  y: 49
-                  width: 296
-                  text: "Loading snapshot..."
-                  text_align: CENTER
-                  long_mode: DOT
-                  text_font: tater_font_14
-                  text_color: 0xA8A096
-                  hidden: true
-        - label:
-            id: event_image_title_label
-            x: 12
-            y: 170
-            width: 296
-            text: "Camera Event"
-            long_mode: DOT
-            text_font: tater_font_18
-            text_color: 0xF08345
-        - label:
-            id: event_image_message_label
-            x: 12
-            y: 194
-            width: 296
-            height: 42
-            text: ""
-            long_mode: WRAP
-            text_font: tater_font_18
-            text_color: 0xF1EEE8
-        - label:
-            id: event_image_description_label
-            x: 12
-            y: 224
-            width: 296
-            height: 16
-            text: ""
-            long_mode: DOT
-            text_font: tater_font_14
-            text_color: 0xA8A096
-            hidden: true
+      auto draw_rail = [&](int x, int y, int w, int h) {
+        it.filled_rectangle(x, y, w, h, id(tater_rail));
+      };
 
-    - id: tool_page
-      styles: screen_style
-      widgets:
-        - obj:
-            x: 0
-            y: 0
-            width: 320
-            height: 34
-            bg_color: 0x151617
-            bg_opa: COVER
-            border_width: 0
-            radius: 0
-            pad_all: 0
-            widgets:
-              - label:
-                  x: 10
-                  y: 8
-                  width: 86
-                  text: "${tater_first_name}"
-                  long_mode: DOT
-                  text_font: tater_font_18
-                  text_color: 0xF08345
-              - label:
-                  id: tool_step_label
-                  x: 244
-                  y: 10
-                  width: 66
-                  text: "running"
-                  text_align: RIGHT
-                  long_mode: DOT
-                  text_font: tater_font_14
-                  text_color: 0xA8A096
-        - label:
-            x: 0
-            y: 56
-            width: 320
-            text: "Tool Call"
-            text_align: CENTER
-            text_font: tater_font_24
-            text_color: 0xF08345
-        - obj:
-            x: 52
-            y: 100
-            width: 216
-            height: 4
-            styles: rail_style
-        - label:
-            id: tool_motion_label
-            x: 52
-            y: 82
-            width: 216
-            text: "o                o"
-            text_align: CENTER
-            text_font: tater_font_24
-            text_color: 0xF08345
-        - label:
-            id: tool_name_label
-            x: 20
-            y: 124
-            width: 280
-            text: "${tater_first_name} is working"
-            text_align: CENTER
-            long_mode: DOT
-            text_font: tater_font_18
-            text_color: 0xF1EEE8
-        - label:
-            id: tool_message_label
-            x: 24
-            y: 158
-            width: 272
-            height: 52
-            text: "I'm working on that now."
-            text_align: CENTER
-            long_mode: WRAP
-            text_font: tater_font_16
-            text_color: 0xA8A096
+      auto draw_lines = [&](std::string text, int x, int y, int max_chars, int max_lines, auto *font, Color color, int line_h) {
+        text = trunc(text, max_chars * max_lines + 8);
+        for (int line = 0; line < max_lines && !text.empty(); line++) {
+          std::string chunk = text;
+          if ((int) chunk.length() > max_chars) {
+            size_t cut = chunk.rfind(' ', max_chars);
+            if (cut == std::string::npos || cut < (size_t) (max_chars / 2)) {
+              cut = max_chars;
+            }
+            chunk = text.substr(0, cut);
+            text.erase(0, cut);
+            while (!text.empty() && text.front() == ' ') {
+              text.erase(0, 1);
+            }
+            if (line == max_lines - 1 && !text.empty()) {
+              chunk = trunc(chunk, max_chars);
+            }
+          } else {
+            text.clear();
+          }
+          it.print(x, y + (line * line_h), font, color, chunk.c_str());
+        }
+      };
+
+      auto draw_home = [&]() {
+        it.fill(id(tater_bg));
+        draw_header(state_text(id(connection_status_text), "starting"));
+        auto now = id(local_time).now();
+        if (now.is_valid()) {
+          std::string date = now.strftime("%a %b %d");
+          std::string clock = now.strftime("%I:%M");
+          it.print(160, 44, id(tater_font_18), id(tater_muted), TextAlign::TOP_CENTER, date.c_str());
+          it.print(160, 62, id(tater_font_56), id(tater_text), TextAlign::TOP_CENTER, clock.c_str());
+        } else {
+          it.print(160, 44, id(tater_font_18), id(tater_muted), TextAlign::TOP_CENTER, "--- --");
+          it.print(160, 62, id(tater_font_56), id(tater_text), TextAlign::TOP_CENTER, "--:--");
+        }
+
+        panel(12, 128, 142, 62);
+        it.print(20, 136, id(tater_font_14), id(tater_muted), "Inside");
+        it.print(20, 154, id(tater_font_24), id(tater_orange), trunc(state_text(id(temp_in_text), "--"), 8).c_str());
+        it.print(146, 159, id(tater_font_18), id(tater_text), TextAlign::TOP_RIGHT, trunc(state_text(id(humidity_in_text), "--"), 7).c_str());
+
+        panel(166, 128, 142, 62);
+        it.print(174, 136, id(tater_font_14), id(tater_muted), "Outside");
+        it.print(174, 154, id(tater_font_24), id(tater_orange), trunc(state_text(id(temp_out_text), "--"), 8).c_str());
+        it.print(300, 159, id(tater_font_18), id(tater_text), TextAlign::TOP_RIGHT, trunc(state_text(id(humidity_out_text), "--"), 7).c_str());
+
+        panel(12, 202, 90, 28);
+        it.print(18, 208, id(tater_font_14), id(tater_muted), "Wind");
+        it.print(94, 208, id(tater_font_14), id(tater_text), TextAlign::TOP_RIGHT, trunc(state_text(id(wind_text), "--"), 8).c_str());
+
+        panel(114, 202, 90, 28);
+        it.print(120, 208, id(tater_font_14), id(tater_muted), "Rain");
+        it.print(196, 208, id(tater_font_14), id(tater_text), TextAlign::TOP_RIGHT, trunc(state_text(id(rain_text), "--"), 8).c_str());
+
+        panel(216, 202, 92, 28);
+        it.print(222, 208, id(tater_font_14), id(tater_muted), "Storm");
+        it.print(300, 208, id(tater_font_14), id(tater_text), TextAlign::TOP_RIGHT, trunc(state_text(id(lightning_text), "--"), 6).c_str());
+      };
+
+      auto draw_voice = [&]() {
+        it.fill(id(tater_bg));
+        draw_header(state_text(id(connection_status_text), "Voice active"));
+        const char *title = "Listening";
+        const char *subtitle = "Say it, I'm listening.";
+        int phase = id(voice_assistant_phase);
+        if (phase == 3) {
+          title = "Hearing you";
+          subtitle = "Keep talking.";
+        } else if (phase == 4) {
+          title = "Thinking";
+          subtitle = "Working through it.";
+        } else if (phase == 5) {
+          title = "Replying";
+          subtitle = "Sending the answer.";
+        } else if (phase == 11) {
+          title = "Voice error";
+          subtitle = "Voice needs attention.";
+        }
+        static const char * const listening[] = {"o        .        o", "  o      .      o  ", "    o    .    o    ", "      o  .  o      ", "        o.o        ", "      o  .  o      "};
+        static const char * const hearing[] = {"|  ||  |||  ||  |", "|| ||| |||| ||| ||", "||| ||||||||| |||", "|| ||| |||| ||| ||", "|  ||  |||  ||  |", "   |   |||   |   "};
+        static const char * const thinking[] = {"o  --------    ", "  o  ------    ", "    o  ----    ", "      o  --    ", "        o      ", "      --  o    "};
+        static const char * const replying[] = {"--__--__--__--", "__--__--__--__", "-_--_--_--_--", "_--_--_--_--_", "--__--__--__--", "__--__--__--__"};
+        static const char * const error[] = {"x      x      x", "  x    x    x  ", "    x  x  x    ", "      xxx      ", "    x  x  x    ", "  x    x    x  "};
+        int frame = id(voice_animation_frame) % 6;
+        const char *motion = listening[frame];
+        if (phase == 3) motion = hearing[frame];
+        else if (phase == 4) motion = thinking[frame];
+        else if (phase == 5) motion = replying[frame];
+        else if (phase == 11) motion = error[frame];
+
+        it.print(160, 54, id(tater_font_36), id(tater_orange), TextAlign::TOP_CENTER, title);
+        it.print(160, 88, id(tater_font_24), id(tater_orange), TextAlign::TOP_CENTER, motion);
+        draw_rail(58, 108, 204, 4);
+        it.filled_rectangle(82, 124, 156, 2, id(tater_orange));
+        it.print(160, 148, id(tater_font_18), id(tater_text), TextAlign::TOP_CENTER, subtitle);
+      };
+
+      auto draw_event = [&]() {
+        it.fill(id(tater_bg));
+        draw_header(trunc(state_text(id(event_priority_text), "normal"), 12));
+        panel(12, 48, 296, 180);
+        it.print(20, 56, id(tater_font_24), id(tater_orange), trunc(state_text(id(event_title_text), "Notification"), 20).c_str());
+        draw_rail(20, 90, 280, 3);
+        draw_lines(state_text(id(event_message_text), ""), 20, 106, 28, 3, id(tater_font_18), id(tater_text), 22);
+        draw_lines(state_text(id(event_description_text), ""), 20, 172, 34, 2, id(tater_font_14), id(tater_muted), 18);
+      };
+
+      auto draw_event_image = [&]() {
+        it.fill(id(tater_bg));
+        draw_header(trunc(state_text(id(event_priority_text), "normal"), 12));
+        it.filled_rectangle(12, 42, 296, 122, id(tater_black));
+        it.rectangle(12, 42, 296, 122, id(tater_border));
+        if (id(event_image_ready)) {
+          it.image(12, 42, id(event_snapshot_image));
+        } else {
+          const char *status = id(event_image_failed) ? "Snapshot unavailable" : "Loading snapshot...";
+          it.print(160, 95, id(tater_font_14), id(tater_muted), TextAlign::TOP_CENTER, status);
+        }
+        it.print(12, 170, id(tater_font_18), id(tater_orange), trunc(state_text(id(event_title_text), "Camera Event"), 26).c_str());
+        draw_lines(state_text(id(event_message_text), ""), 12, 194, 32, 2, id(tater_font_18), id(tater_text), 21);
+        std::string description = state_text(id(event_description_text), "");
+        if (!description.empty()) {
+          it.print(12, 224, id(tater_font_14), id(tater_muted), trunc(description, 38).c_str());
+        }
+      };
+
+      auto draw_tool = [&]() {
+        it.fill(id(tater_bg));
+        draw_header(trunc(state_text(id(tool_step_text), "running"), 12));
+        it.print(160, 56, id(tater_font_24), id(tater_orange), TextAlign::TOP_CENTER, "Tool Call");
+        static const char * const frames[] = {"o                o", "  o            o  ", "    o        o    ", "      o    o      ", "        oo        ", "      o    o      "};
+        int frame = id(tool_animation_frame) % 6;
+        it.print(160, 82, id(tater_font_24), id(tater_orange), TextAlign::TOP_CENTER, frames[frame]);
+        draw_rail(52, 100, 216, 4);
+        it.print(160, 124, id(tater_font_18), id(tater_text), TextAlign::TOP_CENTER, trunc(state_text(id(tool_name_text), "${tater_first_name} is working"), 30).c_str());
+        draw_lines(state_text(id(event_message_text), "I'm working on that now."), 24, 158, 32, 2, id(tater_font_16), id(tater_muted), 20);
+      };
+
+      std::string kind = state_text(id(event_kind_text), "notification");
+      std::string image_url = state_text(id(event_image_url_text), "");
+      if (id(event_visible)) {
+        if (kind == "tool_call") {
+          draw_tool();
+        } else if (!image_url.empty()) {
+          draw_event_image();
+        } else {
+          draw_event();
+        }
+        return;
+      }
+
+      int phase = id(voice_assistant_phase);
+      if ((phase >= 2 && phase <= 5) || phase == 11) {
+        draw_voice();
+      } else {
+        draw_home();
+      }
