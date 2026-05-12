@@ -157,15 +157,38 @@ online_image:
       X-Tater-Token: "${tater_token}"
     on_download_finished:
       then:
+        - logger.log:
+            level: INFO
+            tag: tater.display
+            format: "Snapshot download finished; showing image."
+        - lvgl.image.update:
+            id: event_image_widget
+            src: event_snapshot_image
         - lvgl.widget.show: event_image_widget
         - lvgl.widget.hide: event_image_status_label
+        - if:
+            condition:
+              lambda: return id(event_visible) && id(event_kind_text).state != "tool_call";
+            then:
+              - lvgl.page.show: event_image_page
+        - lvgl.widget.redraw:
+            id: event_image_widget
     on_error:
       then:
+        - logger.log:
+            level: WARN
+            tag: tater.display
+            format: "Snapshot download failed or could not be decoded."
         - lvgl.widget.hide: event_image_widget
         - lvgl.label.update:
             id: event_image_status_label
             text: "Snapshot unavailable"
         - lvgl.widget.show: event_image_status_label
+        - if:
+            condition:
+              lambda: return id(event_visible) && id(event_kind_text).state != "tool_call";
+            then:
+              - lvgl.page.show: event_image_page
 
 i2c:
   - id: i2c_adc_dac
