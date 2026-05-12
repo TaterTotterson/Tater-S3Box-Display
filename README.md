@@ -6,7 +6,7 @@ The screen is built with LVGL and uses a high-contrast Tater color language: bla
 
 ## Screen Preview
 
-![Tater ESP32-S3-BOX-3 display mockup](docs/s3box-display-mockup.svg)
+![Tater ESP32-S3-BOX-3 display mockup](docs/s3box-display-preview.png)
 
 ## What It Shows
 
