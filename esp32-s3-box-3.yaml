@@ -997,7 +997,7 @@ script:
             then:
               - if:
                   condition:
-                    lambda: return response->status_code == 200;
+                    lambda: return response->status_code == 200 && !body.empty();
                   then:
                     - script.execute: mark_tater_http_success
                     - lambda: |-
@@ -1060,7 +1060,7 @@ script:
             then:
               - if:
                   condition:
-                    lambda: return response->status_code == 200;
+                    lambda: return response->status_code == 200 && !body.empty();
                   then:
                     - script.execute: mark_tater_http_success
                     - lambda: |-
@@ -1260,14 +1260,14 @@ interval:
           then:
             - script.execute: animate_tool_call
 
-  - interval: 5s
+  - interval: 15s
     then:
       - if:
           condition:
             wifi.connected:
           then:
             - lambda: |-
-                id(display_poll_tick) = (id(display_poll_tick) + 1) % 6;
+                id(display_poll_tick) = (id(display_poll_tick) + 1) % 4;
             - if:
                 condition:
                   lambda: return id(display_poll_tick) == 0;
