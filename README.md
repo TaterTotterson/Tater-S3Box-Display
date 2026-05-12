@@ -61,6 +61,7 @@ sensor_lightning_strikes: sensor.weather_lightning_strikes
 ## Notes
 
 - The display uses LVGL with ESPHome's `mipi_spi` S3BOX display driver, `auto_clear_enabled: false`, and `update_interval: never`.
+- The ESPHome node keeps the locked `taters3box` base name and enables `name_add_mac_suffix` so each flashed display gets a unique hostname.
 - The Box-3 speaker path includes the ES8311 DAC, I2S speaker, speaker media player, and GPIO46 speaker-enable pin from the upstream Box-3 voice assistant example.
 - Tater polling waits for Wi-Fi and uses single-run scripts so a missing network or offline Tater API cannot overlap HTTP requests during boot.
 - The firmware exposes a `Refresh Display Events` ESPHome button so Tater can nudge connected displays to fetch new events immediately while the normal poll remains as a fallback.
