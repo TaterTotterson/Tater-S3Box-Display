@@ -82,6 +82,8 @@ wifi:
           id: connection_status_text
           state: "Wi-Fi online"
       - script.execute: fetch_tater_feed
+      - script.wait: fetch_tater_feed
+      - delay: 1s
       - script.execute: fetch_tater_events
   on_disconnect:
     then:
@@ -138,7 +140,7 @@ time:
 json:
 
 http_request:
-  timeout: 2s
+  timeout: 3s
   verify_ssl: false
   buffer_size_rx: 1024
   buffer_size_tx: 1024
@@ -260,6 +262,10 @@ globals:
     restore_value: no
     initial_value: "0"
   - id: tater_http_failures
+    type: int
+    restore_value: no
+    initial_value: "0"
+  - id: display_poll_tick
     type: int
     restore_value: no
     initial_value: "0"
@@ -1254,21 +1260,21 @@ interval:
           then:
             - script.execute: animate_tool_call
 
-  - interval: 10s
-    then:
-      - if:
-          condition:
-            wifi.connected:
-          then:
-            - script.execute: fetch_tater_feed
-
   - interval: 5s
     then:
       - if:
           condition:
             wifi.connected:
           then:
-            - script.execute: fetch_tater_events
+            - lambda: |-
+                id(display_poll_tick) = (id(display_poll_tick) + 1) % 6;
+            - if:
+                condition:
+                  lambda: return id(display_poll_tick) == 0;
+                then:
+                  - script.execute: fetch_tater_feed
+                else:
+                  - script.execute: fetch_tater_events
 
 display:
   - platform: mipi_spi
