@@ -4,6 +4,10 @@ ESPHome firmware for the ESP32-S3-BOX-3 display that talks to Tater directly ins
 
 The screen is built with LVGL and uses a high-contrast Tater color language: black surfaces, bright white text, clear muted text, and vivid orange accents.
 
+## Screen Preview
+
+![Tater ESP32-S3-BOX-3 display mockup](docs/s3box-display-mockup.svg)
+
 ## What It Shows
 
 - A Tater home dashboard with time, date, connection status, indoor/outdoor temperature, humidity, wind, rain, and lightning slots.
