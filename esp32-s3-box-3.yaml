@@ -1291,19 +1291,19 @@ lvgl:
   log_level: WARN
   style_definitions:
     - id: screen_style
-      bg_color: 0x111213
+      bg_color: 0x000000
       bg_opa: COVER
       border_width: 0
       pad_all: 0
     - id: panel_style
-      bg_color: 0x1A1B1D
+      bg_color: 0x0B0B0B
       bg_opa: COVER
-      border_color: 0x2A2C30
+      border_color: 0x303030
       border_width: 1
       radius: 8
       pad_all: 8
     - id: rail_style
-      bg_color: 0x2A2C30
+      bg_color: 0x303030
       bg_opa: COVER
       border_width: 0
       radius: 2
@@ -1317,7 +1317,7 @@ lvgl:
             y: 0
             width: 320
             height: 34
-            bg_color: 0x151617
+            bg_color: 0x050505
             bg_opa: COVER
             border_width: 0
             radius: 0
@@ -1330,7 +1330,7 @@ lvgl:
                   text: "${tater_first_name}"
                   long_mode: DOT
                   text_font: tater_font_18
-                  text_color: 0xF08345
+                  text_color: 0xFF8A00
               - label:
                   id: status_label
                   x: 100
@@ -1340,7 +1340,7 @@ lvgl:
                   text_align: RIGHT
                   long_mode: DOT
                   text_font: tater_font_14
-                  text_color: 0xA8A096
+                  text_color: 0xC8C8C8
         - label:
             id: date_label
             x: 0
@@ -1349,7 +1349,7 @@ lvgl:
             text: "--- --"
             text_align: CENTER
             text_font: tater_font_18
-            text_color: 0xA8A096
+            text_color: 0xC8C8C8
         - label:
             id: clock_label
             x: 0
@@ -1358,7 +1358,7 @@ lvgl:
             text: "--:--"
             text_align: CENTER
             text_font: tater_font_56
-            text_color: 0xF1EEE8
+            text_color: 0xFFFFFF
         - obj:
             x: 12
             y: 128
@@ -1374,7 +1374,7 @@ lvgl:
                   width: 126
                   text: "Inside"
                   text_font: tater_font_14
-                  text_color: 0xA8A096
+                  text_color: 0xC8C8C8
               - label:
                   id: temp_in_value
                   x: 0
@@ -1382,7 +1382,7 @@ lvgl:
                   width: 70
                   text: "--"
                   text_font: tater_font_24
-                  text_color: 0xF08345
+                  text_color: 0xFF8A00
               - label:
                   id: humidity_in_value
                   x: 74
@@ -1391,7 +1391,7 @@ lvgl:
                   text: "--"
                   text_align: RIGHT
                   text_font: tater_font_18
-                  text_color: 0xF1EEE8
+                  text_color: 0xFFFFFF
         - obj:
             x: 166
             y: 128
@@ -1407,7 +1407,7 @@ lvgl:
                   width: 126
                   text: "Outside"
                   text_font: tater_font_14
-                  text_color: 0xA8A096
+                  text_color: 0xC8C8C8
               - label:
                   id: temp_out_value
                   x: 0
@@ -1415,7 +1415,7 @@ lvgl:
                   width: 70
                   text: "--"
                   text_font: tater_font_24
-                  text_color: 0xF08345
+                  text_color: 0xFF8A00
               - label:
                   id: humidity_out_value
                   x: 74
@@ -1424,7 +1424,7 @@ lvgl:
                   text: "--"
                   text_align: RIGHT
                   text_font: tater_font_18
-                  text_color: 0xF1EEE8
+                  text_color: 0xFFFFFF
         - obj:
             x: 12
             y: 202
@@ -1440,7 +1440,7 @@ lvgl:
                   y: 0
                   text: "Wind"
                   text_font: tater_font_14
-                  text_color: 0xA8A096
+                  text_color: 0xC8C8C8
               - label:
                   id: wind_value
                   x: 40
@@ -1449,7 +1449,7 @@ lvgl:
                   text: "--"
                   text_align: RIGHT
                   text_font: tater_font_14
-                  text_color: 0xF1EEE8
+                  text_color: 0xFFFFFF
         - obj:
             x: 114
             y: 202
@@ -1465,7 +1465,7 @@ lvgl:
                   y: 0
                   text: "Rain"
                   text_font: tater_font_14
-                  text_color: 0xA8A096
+                  text_color: 0xC8C8C8
               - label:
                   id: rain_value
                   x: 40
@@ -1474,7 +1474,7 @@ lvgl:
                   text: "--"
                   text_align: RIGHT
                   text_font: tater_font_14
-                  text_color: 0xF1EEE8
+                  text_color: 0xFFFFFF
         - obj:
             x: 216
             y: 202
@@ -1490,7 +1490,7 @@ lvgl:
                   y: 0
                   text: "Storm"
                   text_font: tater_font_14
-                  text_color: 0xA8A096
+                  text_color: 0xC8C8C8
               - label:
                   id: lightning_value
                   x: 48
@@ -1499,7 +1499,7 @@ lvgl:
                   text: "--"
                   text_align: RIGHT
                   text_font: tater_font_14
-                  text_color: 0xF1EEE8
+                  text_color: 0xFFFFFF
 
     - id: voice_page
       styles: screen_style
@@ -1509,7 +1509,7 @@ lvgl:
             y: 0
             width: 320
             height: 34
-            bg_color: 0x151617
+            bg_color: 0x050505
             bg_opa: COVER
             border_width: 0
             radius: 0
@@ -1522,7 +1522,7 @@ lvgl:
                   text: "${tater_first_name}"
                   long_mode: DOT
                   text_font: tater_font_18
-                  text_color: 0xF08345
+                  text_color: 0xFF8A00
               - label:
                   id: voice_status_label
                   x: 100
@@ -1532,7 +1532,7 @@ lvgl:
                   text_align: RIGHT
                   long_mode: DOT
                   text_font: tater_font_14
-                  text_color: 0xA8A096
+                  text_color: 0xC8C8C8
         - label:
             id: voice_title_label
             x: 0
@@ -1542,7 +1542,7 @@ lvgl:
             text_align: CENTER
             long_mode: DOT
             text_font: tater_font_36
-            text_color: 0xF08345
+            text_color: 0xFF8A00
         - obj:
             x: 58
             y: 108
@@ -1558,13 +1558,13 @@ lvgl:
             text_align: CENTER
             long_mode: DOT
             text_font: tater_font_24
-            text_color: 0xF08345
+            text_color: 0xFF8A00
         - obj:
             x: 82
             y: 124
             width: 156
             height: 2
-            bg_color: 0xF08345
+            bg_color: 0xFF8A00
             bg_opa: COVER
             border_width: 0
             radius: 1
@@ -1579,7 +1579,7 @@ lvgl:
             text_align: CENTER
             long_mode: WRAP
             text_font: tater_font_18
-            text_color: 0xF1EEE8
+            text_color: 0xFFFFFF
 
     - id: event_page
       styles: screen_style
@@ -1589,7 +1589,7 @@ lvgl:
             y: 0
             width: 320
             height: 34
-            bg_color: 0x151617
+            bg_color: 0x050505
             bg_opa: COVER
             border_width: 0
             radius: 0
@@ -1602,7 +1602,7 @@ lvgl:
                   text: "${tater_first_name}"
                   long_mode: DOT
                   text_font: tater_font_18
-                  text_color: 0xF08345
+                  text_color: 0xFF8A00
               - label:
                   id: event_priority_label
                   x: 218
@@ -1612,7 +1612,7 @@ lvgl:
                   text_align: RIGHT
                   long_mode: DOT
                   text_font: tater_font_14
-                  text_color: 0xA8A096
+                  text_color: 0xC8C8C8
         - obj:
             x: 12
             y: 48
@@ -1630,7 +1630,7 @@ lvgl:
                   text: "Notification"
                   long_mode: DOT
                   text_font: tater_font_24
-                  text_color: 0xF08345
+                  text_color: 0xFF8A00
               - obj:
                   x: 0
                   y: 42
@@ -1646,7 +1646,7 @@ lvgl:
                   text: ""
                   long_mode: WRAP
                   text_font: tater_font_18
-                  text_color: 0xF1EEE8
+                  text_color: 0xFFFFFF
               - label:
                   id: event_description_label
                   x: 0
@@ -1656,7 +1656,7 @@ lvgl:
                   text: ""
                   long_mode: WRAP
                   text_font: tater_font_14
-                  text_color: 0xA8A096
+                  text_color: 0xC8C8C8
 
     - id: event_image_page
       styles: screen_style
@@ -1666,7 +1666,7 @@ lvgl:
             y: 0
             width: 320
             height: 34
-            bg_color: 0x151617
+            bg_color: 0x050505
             bg_opa: COVER
             border_width: 0
             radius: 0
@@ -1679,7 +1679,7 @@ lvgl:
                   text: "${tater_first_name}"
                   long_mode: DOT
                   text_font: tater_font_18
-                  text_color: 0xF08345
+                  text_color: 0xFF8A00
               - label:
                   id: event_image_priority_label
                   x: 218
@@ -1689,15 +1689,15 @@ lvgl:
                   text_align: RIGHT
                   long_mode: DOT
                   text_font: tater_font_14
-                  text_color: 0xA8A096
+                  text_color: 0xC8C8C8
         - obj:
             x: 12
             y: 42
             width: 296
             height: 122
-            bg_color: 0x0D0E0F
+            bg_color: 0x000000
             bg_opa: COVER
-            border_color: 0x2A2C30
+            border_color: 0x303030
             border_width: 1
             radius: 8
             pad_all: 0
@@ -1722,7 +1722,7 @@ lvgl:
                   text_align: CENTER
                   long_mode: DOT
                   text_font: tater_font_14
-                  text_color: 0xA8A096
+                  text_color: 0xC8C8C8
                   hidden: true
         - label:
             id: event_image_title_label
@@ -1732,7 +1732,7 @@ lvgl:
             text: "Camera Event"
             long_mode: DOT
             text_font: tater_font_18
-            text_color: 0xF08345
+            text_color: 0xFF8A00
         - label:
             id: event_image_message_label
             x: 12
@@ -1742,7 +1742,7 @@ lvgl:
             text: ""
             long_mode: WRAP
             text_font: tater_font_18
-            text_color: 0xF1EEE8
+            text_color: 0xFFFFFF
         - label:
             id: event_image_description_label
             x: 12
@@ -1752,7 +1752,7 @@ lvgl:
             text: ""
             long_mode: DOT
             text_font: tater_font_14
-            text_color: 0xA8A096
+            text_color: 0xC8C8C8
             hidden: true
 
     - id: tool_page
@@ -1763,7 +1763,7 @@ lvgl:
             y: 0
             width: 320
             height: 34
-            bg_color: 0x151617
+            bg_color: 0x050505
             bg_opa: COVER
             border_width: 0
             radius: 0
@@ -1776,7 +1776,7 @@ lvgl:
                   text: "${tater_first_name}"
                   long_mode: DOT
                   text_font: tater_font_18
-                  text_color: 0xF08345
+                  text_color: 0xFF8A00
               - label:
                   id: tool_step_label
                   x: 244
@@ -1786,7 +1786,7 @@ lvgl:
                   text_align: RIGHT
                   long_mode: DOT
                   text_font: tater_font_14
-                  text_color: 0xA8A096
+                  text_color: 0xC8C8C8
         - label:
             x: 0
             y: 56
@@ -1794,7 +1794,7 @@ lvgl:
             text: "Tool Call"
             text_align: CENTER
             text_font: tater_font_24
-            text_color: 0xF08345
+            text_color: 0xFF8A00
         - obj:
             x: 52
             y: 100
@@ -1809,7 +1809,7 @@ lvgl:
             text: "o                o"
             text_align: CENTER
             text_font: tater_font_24
-            text_color: 0xF08345
+            text_color: 0xFF8A00
         - label:
             id: tool_name_label
             x: 20
@@ -1819,7 +1819,7 @@ lvgl:
             text_align: CENTER
             long_mode: DOT
             text_font: tater_font_18
-            text_color: 0xF1EEE8
+            text_color: 0xFFFFFF
         - label:
             id: tool_message_label
             x: 24
@@ -1830,4 +1830,4 @@ lvgl:
             text_align: CENTER
             long_mode: WRAP
             text_font: tater_font_16
-            text_color: 0xA8A096
+            text_color: 0xC8C8C8

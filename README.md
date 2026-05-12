@@ -2,7 +2,7 @@
 
 ESPHome firmware for the ESP32-S3-BOX-3 display that talks to Tater directly instead of binding the screen to Home Assistant widgets.
 
-The screen is built with LVGL and uses the Tater color language: near-black surfaces, warm off-white text, muted secondary text, and burnt orange accents.
+The screen is built with LVGL and uses a high-contrast Tater color language: black surfaces, bright white text, clear muted text, and vivid orange accents.
 
 ## What It Shows
 
