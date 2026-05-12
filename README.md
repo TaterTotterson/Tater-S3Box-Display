@@ -21,36 +21,13 @@ GET /tater-ha/v1/display/feed
 GET /tater-ha/v1/display/events
 ```
 
-If Tater voice/display API auth is enabled, set `tater_token` to the same token used by the ESPHome voice routes.
+If Tater voice/display API auth is enabled, the Tater firmware flasher injects the display token during build.
 
 ## Setup
 
-Update the substitutions at the top of [esp32-s3-box-3.yaml](esp32-s3-box-3.yaml):
+Use the Tater firmware flasher in Tater's ESPHome/Firmware tab.
 
-```yaml
-substitutions:
-  device_name: taters3box
-  friendly_name: taterS3Box
-  tater_first_name: Tater
-  display_target: livingroom
-  tater_base_url: http://tater.local:8501
-  tater_token: ""
-  wifi_ssid: !secret wifi_ssid
-  wifi_password: !secret wifi_password
-  device_ip: 10.4.20.237
-```
-
-Then adjust the feed slot entity IDs if needed:
-
-```yaml
-sensor_temp_out: sensor.weather_outdoor_temperature
-sensor_temp_in: sensor.living_room_temperature
-sensor_humidity_out: sensor.humidity
-sensor_humidity_in: sensor.up_sense_humidity_level
-sensor_wind_speed: sensor.wind_speed
-sensor_rain_rate: sensor.rain_rate
-sensor_lightning_strikes: sensor.weather_lightning_strikes
-```
+Choose the Tater S3Box Display firmware, pick the target display, select the environment sensors, configure wake-word and reply playback options, then flash over OTA or browser USB. Tater fetches this firmware template, fills in the device-specific values, and builds the final ESPHome YAML for you.
 
 ## Requirements
 
