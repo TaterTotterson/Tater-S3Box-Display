@@ -1,6 +1,6 @@
 # Tater display firmware for the ESP32-S3-BOX-3.
 substitutions:
-  firmware_version: "1.0.0"
+  firmware_version: "1.0.1"
   device_name: taters3box
   friendly_name: taterS3Box
   tater_first_name: Tater
@@ -26,6 +26,7 @@ substitutions:
   sensor_lightning_strikes: sensor.weather_lightning_strikes
 
   # Tater voice / microWakeWord
+  wake_engine: microwakeword
   wake_word_name: hey_tater
   wake_word_model_url: https://raw.githubusercontent.com/TaterTotterson/microWakeWords/refs/heads/main/microWakeWords/hey_tater.json
   wake_cutoff_slight: "250"
@@ -261,6 +262,7 @@ media_player:
               - not:
                   voice_assistant.is_running:
               - switch.is_off: master_mute_switch
+              - lambda: return std::string("${wake_engine}") != "openwakeword";
           then:
             - micro_wake_word.start:
             - script.execute: show_home_if_no_event
@@ -366,7 +368,15 @@ voice_assistant:
         id(mww).set_capture_close_misses_enabled(id(capture_close_misses).state);
         id(mww).set_capture_close_miss_probability_cutoff(id(close_miss_threshold).state);
         id(mww).set_capture_upload_url(id(trainer_app_url).state);
-    - micro_wake_word.start:
+    - if:
+        condition:
+          lambda: return std::string("${wake_engine}") == "openwakeword";
+        then:
+          - lambda: id(va).set_use_wake_word(true);
+          - voice_assistant.start_continuous:
+        else:
+          - lambda: id(va).set_use_wake_word(false);
+          - micro_wake_word.start:
     - lambda: id(voice_assistant_phase) = 1;
     - text_sensor.template.publish:
         id: connection_status_text
@@ -471,8 +481,15 @@ voice_assistant:
             - not:
                 speaker.is_playing:
                   id: box_speaker
-    - lambda: id(va).set_use_wake_word(false);
-    - micro_wake_word.start:
+    - if:
+        condition:
+          lambda: return std::string("${wake_engine}") == "openwakeword";
+        then:
+          - lambda: id(va).set_use_wake_word(true);
+          - voice_assistant.start_continuous:
+        else:
+          - lambda: id(va).set_use_wake_word(false);
+          - micro_wake_word.start:
     - lambda: id(voice_assistant_phase) = 1;
     - text_sensor.template.publish:
         id: connection_status_text
