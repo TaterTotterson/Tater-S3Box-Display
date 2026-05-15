@@ -1,6 +1,6 @@
 # Tater display firmware for the ESP32-S3-BOX-3.
 substitutions:
-  firmware_version: "1.0.2"
+  firmware_version: "1.0.3"
   device_name: taters3box
   friendly_name: taterS3Box
   tater_first_name: Tater
@@ -319,6 +319,10 @@ globals:
     type: int
     restore_value: no
     initial_value: "10"
+  - id: openwakeword_wake_detected
+    type: bool
+    restore_value: no
+    initial_value: "false"
   - id: voice_api_connected
     type: bool
     restore_value: no
@@ -367,7 +371,9 @@ voice_assistant:
         level: INFO
         tag: tater.voice
         format: "Voice assistant client connected; starting wake word detection."
-    - lambda: id(voice_api_connected) = true;
+    - lambda: |-
+        id(voice_api_connected) = true;
+        id(openwakeword_wake_detected) = false;
     - lambda: |-
         id(mww).set_capture_upload_enabled(id(capture_wake_audio).state);
         id(mww).set_capture_close_misses_enabled(id(capture_close_misses).state);
@@ -386,12 +392,31 @@ voice_assistant:
     - lambda: id(voice_api_connected) = false;
     - voice_assistant.stop:
     - micro_wake_word.stop:
-    - lambda: id(voice_assistant_phase) = 10;
+    - lambda: |-
+        id(openwakeword_wake_detected) = false;
+        id(voice_assistant_phase) = 10;
     - text_sensor.template.publish:
         id: connection_status_text
         state: "Voice offline"
     - script.execute: show_home_if_no_event
   on_error:
+    - lambda: id(openwakeword_wake_detected) = false;
+    - if:
+        condition:
+          or:
+            - lambda: return code == "duplicate_wake_up_detected";
+            - lambda: return code == "stt-no-text-recognized";
+        then:
+          - if:
+              condition:
+                voice_assistant.is_running:
+              then:
+                - voice_assistant.stop:
+          - lambda: id(voice_assistant_phase) = 1;
+          - text_sensor.template.publish:
+              id: connection_status_text
+              state: "Voice ready"
+          - script.execute: show_home_if_no_event
     - if:
         condition:
           and:
@@ -403,32 +428,70 @@ voice_assistant:
               id: connection_status_text
               state: "Voice error"
           - script.execute: show_voice_page
+  on_wake_word_detected:
+    - if:
+        condition:
+          lambda: return id(wake_engine_select).state == "openwakeword";
+        then:
+          - lambda: |-
+              id(openwakeword_wake_detected) = true;
+              id(voice_assistant_phase) = 2;
+          - text_sensor.template.publish:
+              id: connection_status_text
+              state: "Listening"
+          - script.execute: show_voice_page
   on_start:
-    - lambda: id(voice_assistant_phase) = 2;
-    - text_sensor.template.publish:
-        id: connection_status_text
-        state: "Voice active"
-    - script.execute: show_voice_page
+    - if:
+        condition:
+          lambda: return id(wake_engine_select).state != "openwakeword" || id(openwakeword_wake_detected);
+        then:
+          - lambda: id(voice_assistant_phase) = 2;
+          - text_sensor.template.publish:
+              id: connection_status_text
+              state: "Voice active"
+          - script.execute: show_voice_page
+        else:
+          - lambda: id(voice_assistant_phase) = 1;
+          - script.execute: show_home_if_no_event
   on_listening:
-    - lambda: id(voice_assistant_phase) = 2;
-    - text_sensor.template.publish:
-        id: connection_status_text
-        state: "Listening"
-    - script.execute: show_voice_page
+    - if:
+        condition:
+          lambda: return id(wake_engine_select).state != "openwakeword" || id(openwakeword_wake_detected);
+        then:
+          - lambda: id(voice_assistant_phase) = 2;
+          - text_sensor.template.publish:
+              id: connection_status_text
+              state: "Listening"
+          - script.execute: show_voice_page
+        else:
+          - lambda: id(voice_assistant_phase) = 1;
+          - script.execute: show_home_if_no_event
   on_stt_vad_start:
-    - lambda: id(voice_assistant_phase) = 3;
-    - text_sensor.template.publish:
-        id: connection_status_text
-        state: "Hearing you"
-    - script.execute: show_voice_page
+    - if:
+        condition:
+          lambda: return id(wake_engine_select).state != "openwakeword" || id(openwakeword_wake_detected);
+        then:
+          - lambda: id(voice_assistant_phase) = 3;
+          - text_sensor.template.publish:
+              id: connection_status_text
+              state: "Hearing you"
+          - script.execute: show_voice_page
   on_stt_vad_end:
-    - lambda: id(voice_assistant_phase) = 4;
-    - text_sensor.template.publish:
-        id: connection_status_text
-        state: "Thinking"
-    - script.execute: show_voice_page
+    - if:
+        condition:
+          lambda: return id(wake_engine_select).state != "openwakeword" || id(openwakeword_wake_detected);
+        then:
+          - lambda: id(voice_assistant_phase) = 4;
+          - text_sensor.template.publish:
+              id: connection_status_text
+              state: "Thinking"
+          - script.execute: show_voice_page
   on_tool_call_start:
-    - lambda: id(voice_assistant_phase) = 6;
+    - if:
+        condition:
+          lambda: return id(wake_engine_select).state != "openwakeword" || id(openwakeword_wake_detected);
+        then:
+          - lambda: id(voice_assistant_phase) = 6;
     - lambda: |-
         id(event_visible) = true;
         id(event_until_ms) = millis() + 30000U;
@@ -451,7 +514,9 @@ voice_assistant:
   on_intent_progress:
     - if:
         condition:
-          lambda: "return !x.empty();"
+          and:
+            - lambda: "return !x.empty();"
+            - lambda: return id(wake_engine_select).state != "openwakeword" || id(openwakeword_wake_detected);
         then:
           - lambda: id(voice_assistant_phase) = 5;
           - text_sensor.template.publish:
@@ -459,11 +524,15 @@ voice_assistant:
               state: "Replying"
           - script.execute: show_voice_page
   on_tts_start:
-    - lambda: id(voice_assistant_phase) = 5;
-    - text_sensor.template.publish:
-        id: connection_status_text
-        state: "Replying"
-    - script.execute: show_voice_page
+    - if:
+        condition:
+          lambda: return id(wake_engine_select).state != "openwakeword" || id(openwakeword_wake_detected);
+        then:
+          - lambda: id(voice_assistant_phase) = 5;
+          - text_sensor.template.publish:
+              id: connection_status_text
+              state: "Replying"
+          - script.execute: show_voice_page
   on_end:
     - wait_until:
         condition:
@@ -480,7 +549,9 @@ voice_assistant:
                 speaker.is_playing:
                   id: box_speaker
     - script.execute: apply_wake_engine
-    - lambda: id(voice_assistant_phase) = 1;
+    - lambda: |-
+        id(openwakeword_wake_detected) = false;
+        id(voice_assistant_phase) = 1;
     - text_sensor.template.publish:
         id: connection_status_text
         state: "Voice ready"
@@ -861,7 +932,10 @@ script:
                   lambda: return id(wake_engine_select).state == "openwakeword";
                 then:
                   - micro_wake_word.stop:
-                  - lambda: id(va).set_use_wake_word(true);
+                  - lambda: |-
+                      id(openwakeword_wake_detected) = false;
+                      id(voice_assistant_phase) = 1;
+                      id(va).set_use_wake_word(true);
                   - if:
                       condition:
                         not:
@@ -875,7 +949,9 @@ script:
                       then:
                         - voice_assistant.stop:
                   - delay: 150ms
-                  - lambda: id(va).set_use_wake_word(false);
+                  - lambda: |-
+                      id(openwakeword_wake_detected) = false;
+                      id(va).set_use_wake_word(false);
                   - if:
                       condition:
                         switch.is_off: master_mute_switch
