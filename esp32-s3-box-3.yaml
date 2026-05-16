@@ -1,6 +1,6 @@
 # Tater display firmware for the ESP32-S3-BOX-3.
 substitutions:
-  firmware_version: "v2.0.0"
+  firmware_version: "v2.1.0"
   device_name: taters3box
   friendly_name: taterS3Box
   tater_first_name: Tater
@@ -27,8 +27,8 @@ substitutions:
 
   # Tater voice / wake word
   wake_engine: openwakeword
-  openwakeword_server_url: http://tater.local:8501
-  openwakeword_http_timeout_ms: "1400"
+  openwakeword_server_url: ws://tater.local:8501
+  openwakeword_http_timeout_ms: "3000"
   openwakeword_max_failures: "3"
   wake_word_name: hey_tater
   wake_word_model_url: https://raw.githubusercontent.com/TaterTotterson/microWakeWords/refs/heads/main/microWakeWords/hey_tater.json
@@ -402,13 +402,9 @@ remote_wake_word:
     - logger.log:
         level: WARN
         tag: tater.voice
-        format: "Remote openWakeWord unavailable, falling back to microWakeWord: %s"
+        format: "Remote openWakeWord unavailable, temporarily using microWakeWord: %s"
         args: ["message.c_str()"]
-    - lambda: |-
-        id(openwakeword_wake_detected) = false;
-        auto call = id(wake_engine_select).make_call();
-        call.set_option("microwakeword");
-        call.perform();
+    - script.execute: recover_openwakeword_after_fallback
     - text_sensor.template.publish:
         id: connection_status_text
         state: "Using local wake"
@@ -738,7 +734,7 @@ number:
 
   - platform: template
     id: openwakeword_http_timeout_ms
-    name: openWakeWord HTTP Timeout
+    name: openWakeWord Transport Timeout
     icon: mdi:timer-outline
     entity_category: config
     optimistic: true
@@ -1075,6 +1071,39 @@ script:
                         switch.is_off: master_mute_switch
                       then:
                         - micro_wake_word.start:
+
+  - id: recover_openwakeword_after_fallback
+    mode: restart
+    then:
+      - lambda: |-
+          id(openwakeword_wake_detected) = false;
+          id(voice_assistant_phase) = 1;
+          id(va).set_use_wake_word(false);
+      - remote_wake_word.stop:
+      - wait_until:
+          condition:
+            lambda: return !id(oww).is_running();
+          timeout: 3s
+      - if:
+          condition:
+            lambda: return id(wake_engine_select).state == "openwakeword";
+          then:
+            - if:
+                condition:
+                  switch.is_off: master_mute_switch
+                then:
+                  - micro_wake_word.start:
+            - delay: 60s
+            - if:
+                condition:
+                  lambda: return id(wake_engine_select).state == "openwakeword";
+                then:
+                  - logger.log:
+                      level: INFO
+                      tag: tater.voice
+                      format: "Retrying remote openWakeWord endpoint (%s)."
+                      args: ["id(openwakeword_server_url).state.c_str()"]
+                  - script.execute: apply_wake_engine
 
   - id: refresh_clock
     mode: restart
