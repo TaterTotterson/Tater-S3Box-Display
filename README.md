@@ -1,3 +1,12 @@
+<div align="center">
+  <a href="https://taterassistant.com">
+    <img src="images/tater-repo-logo.png" alt="Tater S3Box Display" width="460"/>
+  </a>
+</div>
+<h3 align="center">
+  <a href="https://taterassistant.com">taterassistant.com</a>
+</h3>
+
 # Tater ESP32-S3-BOX-3 Display
 
 ESPHome firmware for the ESP32-S3-BOX-3 display that talks to Tater directly instead of binding the screen to Home Assistant widgets.
