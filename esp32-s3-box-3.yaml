@@ -1,6 +1,6 @@
 # Tater display firmware for the ESP32-S3-BOX-3.
 substitutions:
-  firmware_version: "v2.1.1"
+  firmware_version: "v2.2.0"
   device_name: taters3box
   friendly_name: taterS3Box
   tater_first_name: Tater
@@ -28,6 +28,7 @@ substitutions:
   # Tater voice / wake word
   wake_engine: openwakeword
   openwakeword_server_url: ws://tater.local:8501
+  nanowakeword_server_url: ws://tater.local:8501
   openwakeword_http_timeout_ms: "3000"
   openwakeword_max_failures: "3"
   wake_word_name: hey_tater
@@ -266,7 +267,7 @@ media_player:
               - not:
                   voice_assistant.is_running:
               - switch.is_off: master_mute_switch
-              - lambda: return id(wake_engine_select).state != "openwakeword";
+              - lambda: return id(wake_engine_select).state == "microwakeword";
           then:
             - micro_wake_word.start:
             - script.execute: show_home_if_no_event
@@ -375,6 +376,7 @@ remote_wake_word:
     channels: 0
     gain_factor: 4
   url: ${openwakeword_server_url}
+  stream_path: /api/openwakeword/stream
   source_device: ${device_name}
   wake_word: ${wake_word_name}
   chunk_duration_ms: 500
@@ -384,7 +386,7 @@ remote_wake_word:
     - logger.log:
         level: INFO
         tag: tater.voice
-        format: "Remote openWakeWord detected: %s"
+        format: "Remote wake word detected: %s"
         args: ["wake_word.c_str()"]
     - if:
         condition:
@@ -409,7 +411,7 @@ remote_wake_word:
     - logger.log:
         level: WARN
         tag: tater.voice
-        format: "Remote openWakeWord unavailable, temporarily using microWakeWord: %s"
+        format: "Remote wake word unavailable, temporarily using microWakeWord: %s"
         args: ["message.c_str()"]
     - script.execute: recover_openwakeword_after_fallback
     - text_sensor.template.publish:
@@ -438,7 +440,13 @@ voice_assistant:
         id(mww).set_capture_close_misses_enabled(id(capture_close_misses).state);
         id(mww).set_capture_close_miss_probability_cutoff(id(close_miss_threshold).state);
         id(mww).set_capture_upload_url(id(trainer_app_url).state);
-        id(oww).set_url(id(openwakeword_server_url).state);
+        if (id(wake_engine_select).state == "nanowakeword") {
+          id(oww).set_url(id(nanowakeword_server_url).state);
+          id(oww).set_stream_path("/api/nanowakeword/stream");
+        } else {
+          id(oww).set_url(id(openwakeword_server_url).state);
+          id(oww).set_stream_path("/api/openwakeword/stream");
+        }
     - script.execute: apply_wake_engine
     - lambda: id(voice_assistant_phase) = 1;
     - text_sensor.template.publish:
@@ -492,7 +500,7 @@ voice_assistant:
   on_wake_word_detected:
     - if:
         condition:
-          lambda: return id(wake_engine_select).state == "openwakeword";
+          lambda: return id(wake_engine_select).state != "microwakeword";
         then:
           - lambda: |-
               id(openwakeword_wake_detected) = true;
@@ -505,7 +513,7 @@ voice_assistant:
     - remote_wake_word.stop:
     - if:
         condition:
-          lambda: return id(wake_engine_select).state != "openwakeword" || id(openwakeword_wake_detected);
+          lambda: return id(wake_engine_select).state == "microwakeword" || id(openwakeword_wake_detected);
         then:
           - lambda: id(voice_assistant_phase) = 2;
           - text_sensor.template.publish:
@@ -518,7 +526,7 @@ voice_assistant:
   on_listening:
     - if:
         condition:
-          lambda: return id(wake_engine_select).state != "openwakeword" || id(openwakeword_wake_detected);
+          lambda: return id(wake_engine_select).state == "microwakeword" || id(openwakeword_wake_detected);
         then:
           - lambda: id(voice_assistant_phase) = 2;
           - text_sensor.template.publish:
@@ -531,7 +539,7 @@ voice_assistant:
   on_stt_vad_start:
     - if:
         condition:
-          lambda: return id(wake_engine_select).state != "openwakeword" || id(openwakeword_wake_detected);
+          lambda: return id(wake_engine_select).state == "microwakeword" || id(openwakeword_wake_detected);
         then:
           - lambda: id(voice_assistant_phase) = 3;
           - text_sensor.template.publish:
@@ -541,7 +549,7 @@ voice_assistant:
   on_stt_vad_end:
     - if:
         condition:
-          lambda: return id(wake_engine_select).state != "openwakeword" || id(openwakeword_wake_detected);
+          lambda: return id(wake_engine_select).state == "microwakeword" || id(openwakeword_wake_detected);
         then:
           - lambda: id(voice_assistant_phase) = 4;
           - text_sensor.template.publish:
@@ -551,7 +559,7 @@ voice_assistant:
   on_tool_call_start:
     - if:
         condition:
-          lambda: return id(wake_engine_select).state != "openwakeword" || id(openwakeword_wake_detected);
+          lambda: return id(wake_engine_select).state == "microwakeword" || id(openwakeword_wake_detected);
         then:
           - lambda: id(voice_assistant_phase) = 6;
     - lambda: |-
@@ -578,7 +586,7 @@ voice_assistant:
         condition:
           and:
             - lambda: "return !x.empty();"
-            - lambda: return id(wake_engine_select).state != "openwakeword" || id(openwakeword_wake_detected);
+            - lambda: return id(wake_engine_select).state == "microwakeword" || id(openwakeword_wake_detected);
         then:
           - lambda: id(voice_assistant_phase) = 5;
           - text_sensor.template.publish:
@@ -588,7 +596,7 @@ voice_assistant:
   on_tts_start:
     - if:
         condition:
-          lambda: return id(wake_engine_select).state != "openwakeword" || id(openwakeword_wake_detected);
+          lambda: return id(wake_engine_select).state == "microwakeword" || id(openwakeword_wake_detected);
         then:
           - lambda: id(voice_assistant_phase) = 5;
           - text_sensor.template.publish:
@@ -697,7 +705,26 @@ text:
     mode: TEXT
     max_length: 255
     set_action:
-      - lambda: id(oww).set_url(x);
+      - lambda: |-
+          if (id(wake_engine_select).state == "openwakeword") {
+            id(oww).set_url(x);
+          }
+
+  - platform: template
+    id: nanowakeword_server_url
+    name: NanoWakeWord Server URL
+    icon: mdi:server-network
+    entity_category: config
+    optimistic: true
+    restore_value: true
+    initial_value: "${nanowakeword_server_url}"
+    mode: TEXT
+    max_length: 255
+    set_action:
+      - lambda: |-
+          if (id(wake_engine_select).state == "nanowakeword") {
+            id(oww).set_url(x);
+          }
 
 number:
   - platform: template
@@ -741,7 +768,7 @@ number:
 
   - platform: template
     id: openwakeword_http_timeout_ms
-    name: openWakeWord Transport Timeout
+    name: Remote Wake Transport Timeout
     icon: mdi:timer-outline
     entity_category: config
     optimistic: true
@@ -756,7 +783,7 @@ number:
 
   - platform: template
     id: openwakeword_max_failures
-    name: openWakeWord Max Failures
+    name: Remote Wake Max Failures
     icon: mdi:alert-circle-outline
     entity_category: config
     optimistic: true
@@ -780,6 +807,7 @@ select:
     options:
       - microwakeword
       - openwakeword
+      - nanowakeword
     on_value:
       - script.execute: apply_wake_engine
 
@@ -1033,7 +1061,7 @@ script:
           then:
             - if:
                 condition:
-                  lambda: return id(wake_engine_select).state == "openwakeword";
+                  lambda: return id(wake_engine_select).state != "microwakeword";
                 then:
                   - micro_wake_word.stop:
                   - if:
@@ -1051,12 +1079,18 @@ script:
                       id(openwakeword_wake_detected) = false;
                       id(voice_assistant_phase) = 1;
                       id(va).set_use_wake_word(false);
-                      id(oww).set_url(id(openwakeword_server_url).state);
+                      if (id(wake_engine_select).state == "nanowakeword") {
+                        id(oww).set_url(id(nanowakeword_server_url).state);
+                        id(oww).set_stream_path("/api/nanowakeword/stream");
+                      } else {
+                        id(oww).set_url(id(openwakeword_server_url).state);
+                        id(oww).set_stream_path("/api/openwakeword/stream");
+                      }
                   - logger.log:
                       level: INFO
                       tag: tater.voice
-                      format: "Using remote openWakeWord endpoint (%s)."
-                      args: ["id(openwakeword_server_url).state.c_str()"]
+                      format: "Using remote wake endpoint (%s)."
+                      args: ['(id(wake_engine_select).state == "nanowakeword" ? id(nanowakeword_server_url).state : id(openwakeword_server_url).state).c_str()']
                   - remote_wake_word.start:
                 else:
                   - if:
@@ -1093,7 +1127,7 @@ script:
           timeout: 3s
       - if:
           condition:
-            lambda: return id(wake_engine_select).state == "openwakeword";
+            lambda: return id(wake_engine_select).state != "microwakeword";
           then:
             - if:
                 condition:
@@ -1103,13 +1137,13 @@ script:
             - delay: 60s
             - if:
                 condition:
-                  lambda: return id(wake_engine_select).state == "openwakeword";
+                  lambda: return id(wake_engine_select).state != "microwakeword";
                 then:
                   - logger.log:
                       level: INFO
                       tag: tater.voice
-                      format: "Retrying remote openWakeWord endpoint (%s)."
-                      args: ["id(openwakeword_server_url).state.c_str()"]
+                      format: "Retrying remote wake endpoint (%s)."
+                      args: ['(id(wake_engine_select).state == "nanowakeword" ? id(nanowakeword_server_url).state : id(openwakeword_server_url).state).c_str()']
                   - script.execute: apply_wake_engine
 
   - id: refresh_clock
