@@ -1,6 +1,6 @@
 # Tater display firmware for the ESP32-S3-BOX-3.
 substitutions:
-  firmware_version: "v2.2.0"
+  firmware_version: "v2.2.1"
   device_name: taters3box
   friendly_name: taterS3Box
   tater_first_name: Tater
@@ -1074,7 +1074,6 @@ script:
                   - wait_until:
                       condition:
                         lambda: return !id(oww).is_running();
-                      timeout: 3s
                   - lambda: |-
                       id(openwakeword_wake_detected) = false;
                       id(voice_assistant_phase) = 1;
@@ -1103,7 +1102,6 @@ script:
                   - wait_until:
                       condition:
                         lambda: return !id(oww).is_running();
-                      timeout: 3s
                   - lambda: |-
                       id(openwakeword_wake_detected) = false;
                       id(va).set_use_wake_word(false);
@@ -1124,7 +1122,6 @@ script:
       - wait_until:
           condition:
             lambda: return !id(oww).is_running();
-          timeout: 3s
       - if:
           condition:
             lambda: return id(wake_engine_select).state != "microwakeword";
