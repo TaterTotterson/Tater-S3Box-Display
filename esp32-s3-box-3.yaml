@@ -1,6 +1,6 @@
 # Tater display firmware for the ESP32-S3-BOX-3.
 substitutions:
-  firmware_version: "v2.2.2"
+  firmware_version: "3.0.3"
   device_name: taters3box
   friendly_name: taterS3Box
   tater_first_name: Tater
@@ -68,6 +68,15 @@ esp32:
   board: esp32s3box
   flash_size: 16MB
   cpu_frequency: 240MHz
+  partitions:
+    - name: mww_model_a
+      type: data
+      subtype: 0x40
+      size: 0x80000
+    - name: mww_model_b
+      type: data
+      subtype: 0x41
+      size: 0x80000
   framework:
     type: esp-idf
     version: recommended
@@ -693,6 +702,19 @@ text:
     max_length: 255
     set_action:
       - lambda: id(mww).set_capture_upload_url(x);
+
+  - platform: template
+    id: microwakeword_model_url
+    name: microWakeWord Model URL
+    icon: mdi:file-cloud
+    entity_category: config
+    optimistic: true
+    restore_value: true
+    initial_value: "${wake_word_model_url}"
+    mode: TEXT
+    max_length: 255
+    set_action:
+      - lambda: id(mww).set_runtime_model_url(x);
 
   - platform: template
     id: openwakeword_server_url
