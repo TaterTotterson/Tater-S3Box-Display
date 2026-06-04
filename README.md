@@ -1,3 +1,6 @@
+# this firmware is now in the main firmware repo
+https://github.com/TaterTotterson/microWakeWords
+
 <div align="center">
   <a href="https://taterassistant.com">
     <img src="images/tater-repo-logo.png" alt="Tater S3Box Display" width="460"/>
