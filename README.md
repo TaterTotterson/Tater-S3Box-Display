@@ -1,4 +1,4 @@
-# this firmware is now in the main firmware repo
+# This firmware is now in the main firmware repo
 https://github.com/TaterTotterson/microWakeWords
 
 <div align="center">
